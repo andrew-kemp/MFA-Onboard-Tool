@@ -15,8 +15,8 @@ function Get-InstallFolder {
     if (Test-Path $folder) {
         $useExisting = Read-Host "Folder exists. Use existing folder? (Y/N)"
         if ($useExisting -notin @('Y','y')) {
-            $folder = Read-Host "Enter new folder name to create under $DefaultPath (e.g. MFA-Registration)"
-            if ([string]::IsNullOrWhiteSpace($folder)) { $folder = "$DefaultPath\MFA-Registration" }
+            $folder = Read-Host "Enter new folder name to create under $DefaultPath (e.g. MFA-Onboard-Tool)"
+            if ([string]::IsNullOrWhiteSpace($folder)) { $folder = "$DefaultPath\MFA-Onboard-Tool" }
             $folder = Join-Path $DefaultPath $folder
             New-Item -ItemType Directory -Path $folder -Force | Out-Null
         }
@@ -30,16 +30,16 @@ if ([string]::IsNullOrWhiteSpace($InstallPath)) {
     $InstallPath = Get-InstallFolder "C:\Scripts"
 }
 
-$repoUrl = "https://github.com/andrew-kemp/MFA-Registration/archive/refs/heads/main.zip"
-$zipFile = "$env:TEMP\MFA-Registration.zip"
+$repoUrl = "https://github.com/andrew-kemp/MFA-Onboard-Tool/archive/refs/heads/main.zip"
+$zipFile = "$env:TEMP\MFA-Onboard-Tool.zip"
 
-Write-Host "Downloading MFA-Registration repo..." -ForegroundColor Cyan
+Write-Host "Downloading MFA-Onboard-Tool repo..." -ForegroundColor Cyan
 Invoke-WebRequest -Uri $repoUrl -OutFile $zipFile
 
 Write-Host "Extracting files to $InstallPath..." -ForegroundColor Cyan
 Expand-Archive -Path $zipFile -DestinationPath $InstallPath -Force
 
-$repoFolder = Join-Path $InstallPath "MFA-Registration-main"
+$repoFolder = Join-Path $InstallPath "MFA-Onboard-Tool-main"
 Set-Location $repoFolder
 
 Write-Host "Starting complete deployment..." -ForegroundColor Cyan
@@ -53,16 +53,16 @@ if ([string]::IsNullOrWhiteSpace($InstallPath)) {
     if ([string]::IsNullOrWhiteSpace($InstallPath)) { $InstallPath = "C:\Scripts" }
 }
 
-$repoUrl = "https://github.com/andrew-kemp/MFA-Registration/archive/refs/heads/main.zip"
-$zipFile = "$env:TEMP\MFA-Registration.zip"
+$repoUrl = "https://github.com/andrew-kemp/MFA-Onboard-Tool/archive/refs/heads/main.zip"
+$zipFile = "$env:TEMP\MFA-Onboard-Tool.zip"
 
-Write-Host "Downloading MFA-Registration repo..." -ForegroundColor Cyan
+Write-Host "Downloading MFA-Onboard-Tool repo..." -ForegroundColor Cyan
 Invoke-WebRequest -Uri $repoUrl -OutFile $zipFile
 
 Write-Host "Extracting files to $InstallPath..." -ForegroundColor Cyan
 Expand-Archive -Path $zipFile -DestinationPath $InstallPath -Force
 
-$repoFolder = Join-Path $InstallPath "MFA-Registration-main"
+$repoFolder = Join-Path $InstallPath "MFA-Onboard-Tool-main"
 Set-Location $repoFolder
 
 Write-Host "Starting complete deployment..." -ForegroundColor Cyan
