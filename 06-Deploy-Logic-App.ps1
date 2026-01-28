@@ -358,12 +358,11 @@ try {
     $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_EMAIL", $noReplyMailbox)
     Write-Host "  ✓ Email From: $noReplyMailbox" -ForegroundColor Gray
     
-    # Handle logo - if no URL provided, hide the entire logo section in emails
+    # Handle logo - if no URL provided, remove the entire logo section from emails
     if ([string]::IsNullOrWhiteSpace($logoUrl)) {
-        # Hide logo section by setting display:none on logo-header div
-        $logicAppJsonRaw = $logicAppJsonRaw -replace '(\.logo-header\{[^}]*?)\}', '$1;display:none}'
-        $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_LOGO_URL", "")
-        Write-Host "  ✓ Logo: None (hidden)" -ForegroundColor Gray
+        # Remove the entire logo-header div (works with Unicode-escaped HTML in JSON)
+        $logicAppJsonRaw = $logicAppJsonRaw.Replace("\u003cdiv class=\u0027logo-header\u0027\u003e\u003cimg src=\u0027PLACEHOLDER_LOGO_URL\u0027 alt=\u0027PLACEHOLDER_COMPANY_NAME\u0027/\u003e\u003c/div\u003e", "")
+        Write-Host "  ✓ Logo: None (section removed)" -ForegroundColor Gray
     } else {
         $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_LOGO_URL", $logoUrl)
         Write-Host "  ✓ Logo URL: $logoUrl" -ForegroundColor Gray
