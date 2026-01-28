@@ -133,6 +133,22 @@ try {
     $logicAppJsonRaw = $logicAppJsonRaw.Replace("https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png", "https://mysignins.microsoft.com/images/google-play-button.svg")
     Write-Host "  ✓ App Store URLs: Microsoft official badges`n" -ForegroundColor Gray
     
+    # Verify Azure connection is still active
+    try {
+        $null = Get-AzContext -ErrorAction Stop
+    }
+    catch {
+        Write-Host "Azure session expired, reconnecting..." -ForegroundColor Yellow
+        if (-not [string]::IsNullOrWhiteSpace($tenantId)) {
+            Connect-AzAccount -TenantId $tenantId
+        } else {
+            Connect-AzAccount
+        }
+        if (-not [string]::IsNullOrWhiteSpace($subscriptionId)) {
+            Set-AzContext -SubscriptionId $subscriptionId | Out-Null
+        }
+    }
+    
     # Get existing Logic App to preserve connections
     Write-Host "Getting existing Logic App connections..." -ForegroundColor Yellow
     $existingApp = Get-AzLogicApp -ResourceGroupName $resourceGroup -Name $logicAppName -ErrorAction Stop
