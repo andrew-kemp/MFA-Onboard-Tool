@@ -29,11 +29,30 @@ try {
     
     $config = Get-IniContent -Path $configFile
     
-    # Ensure Azure connection
+    # Get tenant ID from config
+    $tenantId = $config["Tenant"]["TenantId"]
+    $subscriptionId = $config["Tenant"]["SubscriptionId"]
+    
+    # Ensure Azure connection with correct tenant
+    Write-Host "Connecting to Azure..." -ForegroundColor Yellow
     $azContext = Get-AzContext
-    if ($null -eq $azContext) {
-        Connect-AzAccount
+    if ($null -eq $azContext -or $azContext.Tenant.Id -ne $tenantId) {
+        if (-not [string]::IsNullOrWhiteSpace($tenantId)) {
+            Connect-AzAccount -TenantId $tenantId
+        } else {
+            Connect-AzAccount
+        }
+        $azContext = Get-AzContext
     }
+    
+    # Set correct subscription if specified
+    if (-not [string]::IsNullOrWhiteSpace($subscriptionId) -and $azContext.Subscription.Id -ne $subscriptionId) {
+        Set-AzContext -SubscriptionId $subscriptionId | Out-Null
+    }
+    
+    Write-Host "✓ Connected to Azure" -ForegroundColor Green
+    Write-Host "  Tenant: $($azContext.Tenant.Id)" -ForegroundColor Gray
+    Write-Host "  Subscription: $($azContext.Subscription.Name)`n" -ForegroundColor Gray
     
     $resourceGroup = $config["Azure"]["ResourceGroup"]
     $region = $config["Azure"]["Region"]
@@ -45,7 +64,6 @@ try {
     $functionAppName = $config["Azure"]["FunctionAppName"]
     $noReplyMailbox = $config["Email"]["NoReplyMailbox"]
     $mfaGroupId = $config["Security"]["MFAGroupId"]
-    $subscriptionId = (Get-AzContext).Subscription.Id
     
     Write-Host "Configuration:" -ForegroundColor Gray
     Write-Host "  Logic App: $logicAppName" -ForegroundColor Gray
