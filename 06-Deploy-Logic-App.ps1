@@ -292,6 +292,9 @@ try {
         $logicAppJsonRaw_Initial = $logicAppJsonRaw_Initial.Substring(1)
     }
     
+    # Replace recurrence placeholder before parsing JSON
+    $logicAppJsonRaw_Initial = $logicAppJsonRaw_Initial.Replace("RECURRENCE_HOURS_PLACEHOLDER", $recurrenceHours)
+    
     $logicAppJson = $logicAppJsonRaw_Initial | ConvertFrom-Json
     
     # Extract List ID from SharePoint - need to get this
