@@ -326,7 +326,12 @@ try {
     $supportEmail = if ($config.ContainsKey("Branding") -and $config["Branding"].ContainsKey("SupportEmail")) { $config["Branding"]["SupportEmail"] } else { $noReplyMailbox }
     
     # Work with RAW JSON string to preserve @ symbols
-    $logicAppJsonRaw = Get-Content $logicAppJsonPath -Raw
+    $logicAppJsonRaw = Get-Content $logicAppJsonPath -Raw -Encoding UTF8
+    
+    # Remove BOM if present
+    if ($logicAppJsonRaw[0] -eq [char]0xFEFF) {
+        $logicAppJsonRaw = $logicAppJsonRaw.Substring(1)
+    }
     
     # Replace placeholders with actual values
     $logicAppJsonRaw = $logicAppJsonRaw.Replace("RECURRENCE_HOURS_PLACEHOLDER", $recurrenceHours)
