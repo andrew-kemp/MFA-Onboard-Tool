@@ -1,4 +1,4 @@
-# Step 05 - Deploy Logic App
+# Step 06 - Deploy Logic App
 # Creates API connections and deploys Logic App workflow
 
 $ErrorActionPreference = "Stop"
@@ -274,7 +274,7 @@ try {
     Write-Host "  1. Go to: Resource Groups > $resourceGroup > API Connections" -ForegroundColor Gray
     Write-Host "  2. Click on 'sharepointonline' and authorize it" -ForegroundColor Gray
     Write-Host "  3. Click on 'office365' and authorize it" -ForegroundColor Gray
-    Write-Host "  4. Click on 'azuread' and authorize it" -ForegroundColor Gray
+    Write-Host "  4. Click on 'azuread' (Entra ID) and authorize it" -ForegroundColor Gray
     Write-Host "`nPress Enter after authorizing all three connections..." -ForegroundColor Yellow
     Read-Host
     
@@ -285,7 +285,14 @@ try {
     }
     
     Write-Host "Reading Logic App definition..." -ForegroundColor Yellow
-    $logicAppJson = Get-Content $logicAppJsonPath -Raw | ConvertFrom-Json
+    $logicAppJsonRaw_Initial = Get-Content $logicAppJsonPath -Raw -Encoding UTF8
+    
+    # Remove BOM if present
+    if ($logicAppJsonRaw_Initial[0] -eq [char]0xFEFF) {
+        $logicAppJsonRaw_Initial = $logicAppJsonRaw_Initial.Substring(1)
+    }
+    
+    $logicAppJson = $logicAppJsonRaw_Initial | ConvertFrom-Json
     
     # Extract List ID from SharePoint - need to get this
     Write-Host "Connecting to SharePoint to get List ID..." -ForegroundColor Yellow

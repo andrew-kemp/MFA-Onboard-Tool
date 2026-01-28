@@ -1,4 +1,4 @@
-# Step 03 - Create Azure Resources
+# Step 04 - Create Azure Resources
 # Creates Resource Group, Storage Account, and Function App
 
 $ErrorActionPreference = "Stop"
