@@ -3,8 +3,14 @@ param(
 )
 
 if (-not ($PSVersionTable.PSEdition -eq 'Core' -and $PSVersionTable.PSVersion.Major -ge 7)) {
-    Write-Host "ERROR: This script must be run in PowerShell 7+ (pwsh.exe), not Windows PowerShell." -ForegroundColor Red
-    Write-Host "Please open PowerShell 7 and run this script again."
+    Write-Host "`n========================================" -ForegroundColor Red
+    Write-Host "ERROR: PowerShell 7+ Required" -ForegroundColor Red
+    Write-Host "========================================`n" -ForegroundColor Red
+    Write-Host "This script must be run in PowerShell 7+ (pwsh.exe), not Windows PowerShell." -ForegroundColor Yellow
+    Write-Host "`nTo install PowerShell 7, run this command in an elevated PowerShell window:" -ForegroundColor Cyan
+    Write-Host "`nwinget install --id Microsoft.Powershell --source winget" -ForegroundColor White -BackgroundColor DarkBlue
+    Write-Host "`nAlternatively, download from: https://aka.ms/powershell-release?tag=stable" -ForegroundColor Gray
+    Write-Host "`nAfter installation, open PowerShell 7 and re-run this script.`n" -ForegroundColor Yellow
     exit 1
 }
 
