@@ -219,7 +219,7 @@ try {
     } while (-not $match)
     
     # Register app with PnP (creates app, cert, and permissions)
-    Write-Host "`nRegistering Azure AD App (browser login will open)..." -ForegroundColor Cyan
+    Write-Host "`nCreating Entra App Registration (browser login will open)..." -ForegroundColor Cyan
     $regOutput = Register-PnPAzureADApp `
         -ApplicationName $appName `
         -Tenant $tenantId `
