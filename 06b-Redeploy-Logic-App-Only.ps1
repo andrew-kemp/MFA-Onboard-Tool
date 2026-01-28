@@ -87,12 +87,8 @@ try {
     }
     
     # Read branding configuration
-    $logoUrl = if ($config.ContainsKey("Branding") -and $config["Branding"].ContainsKey("LogoUrl")) { $config["Branding"]["LogoUrl"] } else { $null }
-    if ([string]::IsNullOrWhiteSpace($logoUrl)) {
-        $logoUrl = "https://www.cygnetgroup.com/wp-content/uploads/2015/11/new-news-image.jpg"
-    }
-    
-    $companyName = if ($config.ContainsKey("Branding") -and $config["Branding"].ContainsKey("CompanyName")) { $config["Branding"]["CompanyName"] } else { "Cygnet Group" }
+    $logoUrl = if ($config.ContainsKey("Branding") -and $config["Branding"].ContainsKey("LogoUrl")) { $config["Branding"]["LogoUrl"] } else { "" }
+    $companyName = if ($config.ContainsKey("Branding") -and $config["Branding"].ContainsKey("CompanyName")) { $config["Branding"]["CompanyName"] } else { "" }
     $supportTeam = if ($config.ContainsKey("Branding") -and $config["Branding"].ContainsKey("SupportTeam")) { $config["Branding"]["SupportTeam"] } else { "IT Security Team" }
     $supportEmail = if ($config.ContainsKey("Branding") -and $config["Branding"].ContainsKey("SupportEmail")) { $config["Branding"]["SupportEmail"] } else { $noReplyMailbox }
     
@@ -118,11 +114,24 @@ try {
     $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_EMAIL", $noReplyMailbox)
     Write-Host "  ✓ Email From: $noReplyMailbox" -ForegroundColor Gray
     
-    $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_LOGO_URL", $logoUrl)
-    Write-Host "  ✓ Logo URL: $logoUrl" -ForegroundColor Gray
+    # Handle logo - if no URL provided, hide the entire logo section in emails
+    if ([string]::IsNullOrWhiteSpace($logoUrl)) {
+        # Hide logo section by setting display:none on logo-header div
+        $logicAppJsonRaw = $logicAppJsonRaw -replace '(\.logo-header\{[^}]*?)\}', '$1;display:none}'
+        $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_LOGO_URL", "")
+        Write-Host "  ✓ Logo: None (hidden)" -ForegroundColor Gray
+    } else {
+        $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_LOGO_URL", $logoUrl)
+        Write-Host "  ✓ Logo URL: $logoUrl" -ForegroundColor Gray
+    }
     
-    $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_COMPANY_NAME", $companyName)
-    Write-Host "  ✓ Company Name: $companyName" -ForegroundColor Gray
+    if ([string]::IsNullOrWhiteSpace($companyName)) {
+        $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_COMPANY_NAME", "Company Logo")
+        Write-Host "  ✓ Company Name: (default)" -ForegroundColor Gray
+    } else {
+        $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_COMPANY_NAME", $companyName)
+        Write-Host "  ✓ Company Name: $companyName" -ForegroundColor Gray
+    }
     
     $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_SUPPORT_TEAM", $supportTeam)
     Write-Host "  ✓ Support Team: $supportTeam" -ForegroundColor Gray

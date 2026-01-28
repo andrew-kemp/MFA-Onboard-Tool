@@ -175,11 +175,27 @@ try {
     $htmlPath = Join-Path $PSScriptRoot "portal\upload-portal.html"
     $htmlContent = Get-Content $htmlPath -Raw
     
+    # Get logo URL from branding section (optional)
+    $logoUrl = ""
+    if ($config.ContainsKey("Branding") -and $config["Branding"].ContainsKey("LogoUrl")) {
+        $logoUrl = $config["Branding"]["LogoUrl"]
+    }
+    
     $htmlContent = $htmlContent -replace 'YOUR_CLIENT_ID_HERE', $appClientId
     $htmlContent = $htmlContent -replace 'YOUR_TENANT_ID_HERE', $azContext.Tenant.Id
     $htmlContent = $htmlContent -replace 'YOUR_FUNCTION_APP_URL_HERE', "https://$functionAppName.azurewebsites.net"
     $htmlContent = $htmlContent -replace 'YOUR_SHAREPOINT_SITE_URL_HERE', $siteUrl
     $htmlContent = $htmlContent -replace 'YOUR_SHAREPOINT_LIST_ID_HERE', $listId
+    
+    # Handle logo - if URL provided, show it; otherwise hide the element
+    if ([string]::IsNullOrWhiteSpace($logoUrl)) {
+        # No logo - keep element hidden
+        $htmlContent = $htmlContent -replace 'LOGO_URL_PLACEHOLDER', ''
+    } else {
+        # Logo provided - set src and make visible
+        $htmlContent = $htmlContent -replace 'LOGO_URL_PLACEHOLDER', $logoUrl
+        $htmlContent = $htmlContent -replace 'id="headerLogo" class="header-logo" src="[^"]*" style="display: none;"', "id=`"headerLogo`" class=`"header-logo`" src=`"$logoUrl`" style=`"display: block;`""
+    }
     
     $tempHtmlPath = Join-Path $PSScriptRoot "portal\upload-portal-configured.html"
     $htmlContent | Set-Content $tempHtmlPath -Force
