@@ -471,21 +471,21 @@
         async function signIn() {
             try {
                 const loginResponse = await msalInstance.loginPopup({
-                    scopes: ["user.read", "Sites.ReadWrite.All"]
+                    scopes: ["user.read", "Sites.Read.All"]
                 });
                 account = loginResponse.account;
                 
-                // Proactively acquire tokens to cache them
+                // Proactively acquire tokens to cache them for reports
                 try {
                     await msalInstance.acquireTokenSilent({
-                        scopes: ["Sites.ReadWrite.All"],
+                        scopes: ["Sites.Read.All"],
                         account: account
                     });
                 } catch (silentError) {
                     // If silent acquisition fails, try interactive
                     console.log('Proactive token acquisition needed, requesting interactively...');
                     await msalInstance.acquireTokenPopup({
-                        scopes: ["Sites.ReadWrite.All"],
+                        scopes: ["Sites.Read.All"],
                         account: account
                     });
                 }
@@ -573,18 +573,18 @@
             document.getElementById('results').classList.remove('show');
             
             try {
-                // Get access token with proper scopes for SharePoint
+                // Get access token for user identification (Function App allows anonymous but we send token for logging)
                 let tokenResponse;
                 try {
                     tokenResponse = await msalInstance.acquireTokenSilent({
-                        scopes: ["Sites.ReadWrite.All"],
+                        scopes: ["user.read"],
                         account: account
                     });
                 } catch (silentError) {
                     // If silent token acquisition fails, fall back to interactive
                     console.log('Silent token acquisition failed, requesting interactively...');
                     tokenResponse = await msalInstance.acquireTokenPopup({
-                        scopes: ["Sites.ReadWrite.All"],
+                        scopes: ["user.read"],
                         account: account
                     });
                 }
