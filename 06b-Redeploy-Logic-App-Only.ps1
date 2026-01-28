@@ -79,7 +79,12 @@ try {
     }
     
     Write-Host "Reading Logic App template..." -ForegroundColor Yellow
-    $logicAppJsonRaw = Get-Content $logicAppJsonPath -Raw
+    $logicAppJsonRaw = Get-Content $logicAppJsonPath -Raw -Encoding UTF8
+    
+    # Remove BOM if present
+    if ($logicAppJsonRaw[0] -eq [char]0xFEFF) {
+        $logicAppJsonRaw = $logicAppJsonRaw.Substring(1)
+    }
     
     # Read branding configuration
     $logoUrl = if ($config.ContainsKey("Branding") -and $config["Branding"].ContainsKey("LogoUrl")) { $config["Branding"]["LogoUrl"] } else { $null }
