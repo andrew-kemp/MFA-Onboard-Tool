@@ -471,9 +471,25 @@
         async function signIn() {
             try {
                 const loginResponse = await msalInstance.loginPopup({
-                    scopes: ["user.read"]
+                    scopes: ["user.read", "Sites.ReadWrite.All"]
                 });
                 account = loginResponse.account;
+                
+                // Proactively acquire tokens to cache them
+                try {
+                    await msalInstance.acquireTokenSilent({
+                        scopes: ["Sites.ReadWrite.All"],
+                        account: account
+                    });
+                } catch (silentError) {
+                    // If silent acquisition fails, try interactive
+                    console.log('Proactive token acquisition needed, requesting interactively...');
+                    await msalInstance.acquireTokenPopup({
+                        scopes: ["Sites.ReadWrite.All"],
+                        account: account
+                    });
+                }
+                
                 showUploadSection();
             } catch (error) {
                 console.error('Login error:', error);
@@ -557,11 +573,21 @@
             document.getElementById('results').classList.remove('show');
             
             try {
-                // Get access token
-                const tokenResponse = await msalInstance.acquireTokenSilent({
-                    scopes: ["user.read"],
-                    account: account
-                });
+                // Get access token with proper scopes for SharePoint
+                let tokenResponse;
+                try {
+                    tokenResponse = await msalInstance.acquireTokenSilent({
+                        scopes: ["Sites.ReadWrite.All"],
+                        account: account
+                    });
+                } catch (silentError) {
+                    // If silent token acquisition fails, fall back to interactive
+                    console.log('Silent token acquisition failed, requesting interactively...');
+                    tokenResponse = await msalInstance.acquireTokenPopup({
+                        scopes: ["Sites.ReadWrite.All"],
+                        account: account
+                    });
+                }
                 
                 // Upload to Function App
                 const response = await fetch(`${functionAppUrl}/api/upload-users`, {
@@ -644,7 +670,7 @@
             reportsError.style.display = 'none';
             
             try {
-                // Get access token
+                // Get access token with fallback to interactive
                 const accounts = myMSALObj.getAllAccounts();
                 if (accounts.length === 0) {
                     throw new Error('Please sign in first');
@@ -655,7 +681,13 @@
                     account: accounts[0]
                 };
                 
-                const response = await myMSALObj.acquireTokenSilent(tokenRequest);
+                let response;
+                try {
+                    response = await myMSALObj.acquireTokenSilent(tokenRequest);
+                } catch (silentError) {
+                    console.log('Silent token acquisition failed for reports, requesting interactively...');
+                    response = await myMSALObj.acquireTokenPopup(tokenRequest);
+                }
                 const accessToken = response.accessToken;
                 
                 // Get SharePoint list items via Graph API
