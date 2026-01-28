@@ -29,29 +29,65 @@ function Get-IniContent {
 $config = Get-IniContent -Path $ConfigFile
 
 # Extract key values
-$resourceGroup = $config["Azure"]["ResourceGroup"]
-$functionAppName = $config["Azure"]["FunctionAppName"]
+$tenantId = $config["Tenant"]["TenantId"]
 $subscriptionId = $config["Tenant"]["SubscriptionId"]
 $siteUrl = $config["SharePoint"]["SiteUrl"]
+$listTitle = $config["SharePoint"]["ListTitle"]
+$spClientId = $config["SharePoint"]["ClientId"]
+$certThumbprint = $config["SharePoint"]["CertificateThumbprint"]
+$mfaGroupId = $config["Security"]["MFAGroupId"]
+$mfaGroupName = $config["Security"]["MFAGroupName"]
+$mfaGroupMail = $config["Security"]["MFAGroupMail"]
+$resourceGroup = $config["Azure"]["ResourceGroup"]
+$region = $config["Azure"]["Region"]
+$functionAppName = $config["Azure"]["FunctionAppName"]
+$storageAccountName = $config["Azure"]["StorageAccountName"]
+$mfaPrincipalId = $config["Azure"]["MFAPrincipalId"]
+$mailboxName = $config["Email"]["MailboxName"]
+$noReplyMailbox = $config["Email"]["NoReplyMailbox"]
+$mailboxDelegate = $config["Email"]["MailboxDelegate"]
+$emailSubject = $config["Email"]["EmailSubject"]
 $logicAppName = $config["LogicApp"]["LogicAppName"]
 $reportsLogicAppName = $config["EmailReports"]["LogicAppName"]
 $uploadPortalClientId = $config["UploadPortal"]["ClientId"]
-$storageAccountName = $config["Azure"]["StorageAccountName"]
+$uploadPortalAppName = $config["UploadPortal"]["AppName"]
+$logoUrl = $config["Branding"]["LogoUrl"]
+$companyName = $config["Branding"]["CompanyName"]
+$supportTeam = $config["Branding"]["SupportTeam"]
+$supportEmail = $config["Branding"]["SupportEmail"]
 $portalUrl = "https://$storageAccountName.z33.web.core.windows.net/upload-portal.html"
 
-# Build step statuses
+# Build step statuses in chronological order
 $stepsHtml = ""
 if ($StepResults) {
-    foreach ($step in $StepResults.Keys) {
-        $status = $StepResults[$step]
-        $statusClass = if ($status) { "success" } else { "failed" }
-        $statusText = if ($status) { "✓ Success" } else { "✗ Failed" }
-        $stepsHtml += @"
+    # Define the correct order for steps
+    $stepOrder = @(
+        "Step 01: Install Prerequisites",
+        "Step 02: Provision SharePoint",
+        "Step 03: Create Shared Mailbox",
+        "Step 04: Azure Resources",
+        "Step 05: Function App Configuration",
+        "Step 06: Logic App Deployment",
+        "Step 07: Upload Portal Deployment",
+        "Step 08: Email Reports Setup",
+        "Fix: Function Authentication",
+        "Fix: Graph Permissions",
+        "Fix: Logic App Permissions"
+    )
+    
+    # Display steps in order
+    foreach ($stepName in $stepOrder) {
+        if ($StepResults.ContainsKey($stepName)) {
+            $status = $StepResults[$stepName]
+            $statusClass = if ($status) { "success" } else { "failed" }
+            $statusText = if ($status) { "✓ Success" } else { "✗ Failed" }
+            $stepsHtml += @"
         <tr>
-            <td class="step-name">$step</td>
+            <td class="step-name">$stepName</td>
             <td class="step-status $statusClass">$statusText</td>
         </tr>
 "@
+        }
     }
 }
 
@@ -72,7 +108,7 @@ $html = @"
         }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
             min-height: 100vh;
             padding: 20px;
         }
@@ -85,7 +121,7 @@ $html = @"
             overflow: hidden;
         }
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
             color: white;
             padding: 40px;
             text-align: center;
@@ -109,7 +145,7 @@ $html = @"
             color: #333;
             margin-bottom: 20px;
             padding-bottom: 10px;
-            border-bottom: 3px solid #667eea;
+            border-bottom: 3px solid #2a5298;
             display: flex;
             align-items: center;
             gap: 10px;
@@ -128,7 +164,7 @@ $html = @"
             text-align: left;
             font-weight: 600;
             color: #333;
-            border-bottom: 2px solid #667eea;
+            border-bottom: 2px solid #2a5298;
         }
         .status-table td {
             padding: 12px;
@@ -156,7 +192,7 @@ $html = @"
         }
         .link-label {
             font-weight: 600;
-            color: #667eea;
+            color: #2a5298;
             font-size: 0.9em;
             text-transform: uppercase;
             margin-bottom: 8px;
@@ -164,7 +200,7 @@ $html = @"
         .link-value {
             padding: 10px 12px;
             background: white;
-            border-left: 4px solid #667eea;
+            border-left: 4px solid #2a5298;
             border-radius: 4px;
             word-break: break-all;
             cursor: pointer;
@@ -174,7 +210,7 @@ $html = @"
             background: #f0f0f0;
         }
         .link-value a {
-            color: #667eea;
+            color: #2a5298;
             text-decoration: none;
             font-weight: 500;
         }
@@ -189,7 +225,7 @@ $html = @"
         }
         .button {
             padding: 10px 16px;
-            background: #667eea;
+            background: #2a5298;
             color: white;
             border: none;
             border-radius: 6px;
@@ -201,7 +237,7 @@ $html = @"
             transition: background 0.2s;
         }
         .button:hover {
-            background: #764ba2;
+            background: #1e3c72;
         }
         .button.secondary {
             background: #666;
@@ -370,29 +406,186 @@ $html = @"
                     Resource Information
                 </div>
 
+                <h3 style="margin-bottom: 15px; color: #333;">Tenant Configuration</h3>
                 <div class="grid">
                     <div class="link-section">
-                        <div class="link-label">Subscription ID</div>
-                        <div class="link-value" style="border-left-color: #ff9800;">$subscriptionId</div>
-                        <button class="button secondary" onclick="copyToClipboard('$subscriptionId')" style="margin-top: 8px; width: 100%;">Copy</button>
+                        <div class="link-label">Tenant ID</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$tenantId</div>
+                        <button class="button secondary" onclick="copyToClipboard('$tenantId')" style="margin-top: 8px; width: 100%;">Copy</button>
                     </div>
 
                     <div class="link-section">
+                        <div class="link-label">Subscription ID</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$subscriptionId</div>
+                        <button class="button secondary" onclick="copyToClipboard('$subscriptionId')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+                </div>
+
+                <h3 style="margin: 30px 0 15px 0; color: #333;">Azure Resources</h3>
+                <div class="grid">
+                    <div class="link-section">
                         <div class="link-label">Resource Group</div>
-                        <div class="link-value" style="border-left-color: #ff9800;">$resourceGroup</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$resourceGroup</div>
                         <button class="button secondary" onclick="copyToClipboard('$resourceGroup')" style="margin-top: 8px; width: 100%;">Copy</button>
                     </div>
 
                     <div class="link-section">
+                        <div class="link-label">Region</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$region</div>
+                        <button class="button secondary" onclick="copyToClipboard('$region')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+
+                    <div class="link-section">
+                        <div class="link-label">Function App Name</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$functionAppName</div>
+                        <button class="button secondary" onclick="copyToClipboard('$functionAppName')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+
+                    <div class="link-section">
                         <div class="link-label">Storage Account</div>
-                        <div class="link-value" style="border-left-color: #ff9800;">$storageAccountName</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$storageAccountName</div>
                         <button class="button secondary" onclick="copyToClipboard('$storageAccountName')" style="margin-top: 8px; width: 100%;">Copy</button>
                     </div>
 
                     <div class="link-section">
+                        <div class="link-label">MFA Principal ID</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$mfaPrincipalId</div>
+                        <button class="button secondary" onclick="copyToClipboard('$mfaPrincipalId')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+
+                    <div class="link-section">
+                        <div class="link-label">Invitation Logic App</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$logicAppName</div>
+                        <button class="button secondary" onclick="copyToClipboard('$logicAppName')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+
+                    <div class="link-section">
+                        <div class="link-label">Reports Logic App</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$reportsLogicAppName</div>
+                        <button class="button secondary" onclick="copyToClipboard('$reportsLogicAppName')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+                </div>
+
+                <h3 style="margin: 30px 0 15px 0; color: #333;">SharePoint Configuration</h3>
+                <div class="grid">
+                    <div class="link-section">
+                        <div class="link-label">Site URL</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$siteUrl</div>
+                        <button class="button secondary" onclick="copyToClipboard('$siteUrl')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+
+                    <div class="link-section">
+                        <div class="link-label">List Title</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$listTitle</div>
+                        <button class="button secondary" onclick="copyToClipboard('$listTitle')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+
+                    <div class="link-section">
+                        <div class="link-label">SharePoint Client ID</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$spClientId</div>
+                        <button class="button secondary" onclick="copyToClipboard('$spClientId')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+
+                    <div class="link-section">
+                        <div class="link-label">Certificate Thumbprint</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$certThumbprint</div>
+                        <button class="button secondary" onclick="copyToClipboard('$certThumbprint')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+                </div>
+
+                <h3 style="margin: 30px 0 15px 0; color: #333;">Security Group</h3>
+                <div class="grid">
+                    <div class="link-section">
+                        <div class="link-label">MFA Group Name</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$mfaGroupName</div>
+                        <button class="button secondary" onclick="copyToClipboard('$mfaGroupName')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+
+                    <div class="link-section">
+                        <div class="link-label">MFA Group ID</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$mfaGroupId</div>
+                        <button class="button secondary" onclick="copyToClipboard('$mfaGroupId')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+
+                    <div class="link-section">
+                        <div class="link-label">MFA Group Email</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$mfaGroupMail</div>
+                        <button class="button secondary" onclick="copyToClipboard('$mfaGroupMail')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+                </div>
+
+                <h3 style="margin: 30px 0 15px 0; color: #333;">Email Configuration</h3>
+                <div class="grid">
+                    <div class="link-section">
+                        <div class="link-label">Mailbox Name</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$mailboxName</div>
+                        <button class="button secondary" onclick="copyToClipboard('$mailboxName')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+
+                    <div class="link-section">
+                        <div class="link-label">No-Reply Mailbox</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$noReplyMailbox</div>
+                        <button class="button secondary" onclick="copyToClipboard('$noReplyMailbox')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+
+                    <div class="link-section">
+                        <div class="link-label">Mailbox Delegate</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$mailboxDelegate</div>
+                        <button class="button secondary" onclick="copyToClipboard('$mailboxDelegate')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+
+                    <div class="link-section">
+                        <div class="link-label">Email Subject</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$emailSubject</div>
+                        <button class="button secondary" onclick="copyToClipboard('$emailSubject')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+                </div>
+
+                <h3 style="margin: 30px 0 15px 0; color: #333;">Upload Portal</h3>
+                <div class="grid">
+                    <div class="link-section">
                         <div class="link-label">Upload Portal Client ID</div>
-                        <div class="link-value" style="border-left-color: #ff9800;">$uploadPortalClientId</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$uploadPortalClientId</div>
                         <button class="button secondary" onclick="copyToClipboard('$uploadPortalClientId')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+
+                    <div class="link-section">
+                        <div class="link-label">App Name</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$uploadPortalAppName</div>
+                        <button class="button secondary" onclick="copyToClipboard('$uploadPortalAppName')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+
+                    <div class="link-section">
+                        <div class="link-label">Portal URL</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$portalUrl</div>
+                        <button class="button secondary" onclick="copyToClipboard('$portalUrl')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+                </div>
+
+                <h3 style="margin: 30px 0 15px 0; color: #333;">Branding</h3>
+                <div class="grid">
+                    <div class="link-section">
+                        <div class="link-label">Company Name</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$companyName</div>
+                        <button class="button secondary" onclick="copyToClipboard('$companyName')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+
+                    <div class="link-section">
+                        <div class="link-label">Logo URL</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$logoUrl</div>
+                        <button class="button secondary" onclick="copyToClipboard('$logoUrl')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+
+                    <div class="link-section">
+                        <div class="link-label">Support Team</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$supportTeam</div>
+                        <button class="button secondary" onclick="copyToClipboard('$supportTeam')" style="margin-top: 8px; width: 100%;">Copy</button>
+                    </div>
+
+                    <div class="link-section">
+                        <div class="link-label">Support Email</div>
+                        <div class="link-value" style="border-left-color: #2a5298;">$supportEmail</div>
+                        <button class="button secondary" onclick="copyToClipboard('$supportEmail')" style="margin-top: 8px; width: 100%;">Copy</button>
                     </div>
                 </div>
             </div>

@@ -44,26 +44,3 @@ Set-Location $repoFolder
 
 Write-Host "Starting complete deployment..." -ForegroundColor Cyan
 ./Run-Complete-Deployment-Master.ps1
-param(
-    [string]$InstallPath = ""
-)
-
-if ([string]::IsNullOrWhiteSpace($InstallPath)) {
-    $InstallPath = Read-Host "Enter install location (default: C:\Scripts)"
-    if ([string]::IsNullOrWhiteSpace($InstallPath)) { $InstallPath = "C:\Scripts" }
-}
-
-$repoUrl = "https://github.com/andrew-kemp/MFA-Onboard-Tool/archive/refs/heads/main.zip"
-$zipFile = "$env:TEMP\MFA-Onboard-Tool.zip"
-
-Write-Host "Downloading MFA-Onboard-Tool repo..." -ForegroundColor Cyan
-Invoke-WebRequest -Uri $repoUrl -OutFile $zipFile
-
-Write-Host "Extracting files to $InstallPath..." -ForegroundColor Cyan
-Expand-Archive -Path $zipFile -DestinationPath $InstallPath -Force
-
-$repoFolder = Join-Path $InstallPath "MFA-Onboard-Tool-main"
-Set-Location $repoFolder
-
-Write-Host "Starting complete deployment..." -ForegroundColor Cyan
-./Run-Complete-Deployment-Master.ps1
