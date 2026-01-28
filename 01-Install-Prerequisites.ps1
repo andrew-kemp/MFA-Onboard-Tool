@@ -79,6 +79,25 @@ try {
     Write-Host "Checking PowerShell version..." -ForegroundColor Yellow
     Write-Host "✓ PowerShell $($PSVersionTable.PSVersion) detected" -ForegroundColor Green
     
+    # Check Azure CLI
+    Write-Host "`nChecking Azure CLI..." -ForegroundColor Yellow
+    try {
+        $azVersion = az --version 2>$null | Select-Object -First 1
+        if ($azVersion) {
+            Write-Host "✓ Azure CLI installed: $($azVersion)" -ForegroundColor Green
+        } else {
+            throw "Azure CLI not found"
+        }
+    }
+    catch {
+        Write-Host "✗ Azure CLI is not installed or not in PATH" -ForegroundColor Red
+        Write-Host "`nTo install Azure CLI, run this command in an elevated PowerShell window:" -ForegroundColor Cyan
+        Write-Host "`nwinget install -e --id Microsoft.AzureCLI" -ForegroundColor White -BackgroundColor DarkBlue
+        Write-Host "`nAlternatively, download from: https://aka.ms/installazurecliwindows" -ForegroundColor Gray
+        Write-Host "`nAfter installation, restart this script.`n" -ForegroundColor Yellow
+        throw "Azure CLI is required but not installed"
+    }
+    
     # Required modules
     $modules = @(
         @{Name="PnP.PowerShell"; MinVersion="2.0.0"}
@@ -90,6 +109,10 @@ try {
         @{Name="Microsoft.Graph.Groups"; MinVersion="2.0.0"}
         @{Name="ExchangeOnlineManagement"; MinVersion="3.0.0"}
     )
+    
+    Write-Host "`nNote: Cleaning any conflicting module versions..." -ForegroundColor Yellow
+    # Remove old Microsoft.Graph modules that might conflict
+    Get-Module Microsoft.Graph* | Remove-Module -Force -ErrorAction SilentlyContinue
     
     foreach ($module in $modules) {
         Write-Host "`nChecking module: $($module.Name)..." -ForegroundColor Yellow

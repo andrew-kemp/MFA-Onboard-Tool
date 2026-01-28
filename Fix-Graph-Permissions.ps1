@@ -58,11 +58,18 @@ else {
 
 Write-Host "`nGranting Graph API permissions..." -ForegroundColor Yellow
 
-# Ensure Microsoft.Graph modules are loaded
-Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
+# Force clean reload of Microsoft.Graph modules to avoid assembly conflicts
+Get-Module Microsoft.Graph* | Remove-Module -Force -ErrorAction SilentlyContinue
+Import-Module Microsoft.Graph.Authentication -Force -ErrorAction Stop
 
 # Connect to Microsoft Graph with required scopes
-Connect-MgGraph -TenantId $tenantId -Scopes "Application.Read.All","AppRoleAssignment.ReadWrite.All" -NoWelcome
+try {
+    Connect-MgGraph -TenantId $tenantId -Scopes "Application.Read.All","AppRoleAssignment.ReadWrite.All" -NoWelcome
+}
+catch {
+    Write-Host "Failed to connect with interactive browser. Trying device code flow..." -ForegroundColor Yellow
+    Connect-MgGraph -TenantId $tenantId -Scopes "Application.Read.All","AppRoleAssignment.ReadWrite.All" -UseDeviceCode -NoWelcome
+}
 
 # Get Microsoft Graph Service Principal
 $graphSp = Get-MgServicePrincipal -Filter "appId eq '00000003-0000-0000-c000-000000000000'"
