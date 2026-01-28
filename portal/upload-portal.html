@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MFA User Upload Portal</title>
+    <script src="https://alcdn.msauth.net/browser/2.30.0/js/msal-browser.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            max-width: 800px;
+            width: 100%;
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 30px;
+            text-align: center;
+            color: white;
+        }
+        
+        .header h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .login-section {
+            text-align: center;
+            padding: 40px 0;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s;
+        }
+        
+        .btn:hover {
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        input[type="text"],
+        input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input[type="text"]:focus,
+        input[type="file"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .user-info {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+        }
+        
+        .user-info strong {
+            color: #667eea;
+        }
+        
+        .results {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .results.show {
+            display: block;
+        }
+        
+        .results h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .stat {
+            display: inline-block;
+            margin: 10px 20px 10px 0;
+            padding: 10px 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .error-list,
+        .skipped-list {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+        
+        .error-item,
+        .skipped-item {
+            background: white;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 4px solid #ff6b6b;
+            font-size: 13px;
+        }
+        
+        .skipped-item {
+            border-left-color: #ffa502;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            display: none;
+        }
+        
+        .loading.show {
+            display: block;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .info-box strong {
+            color: #1976d2;
+        }
+        
+        .tabs {
+            display: flex;
+            margin-bottom: 25px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .tab {
+            flex: 1;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            background: #f5f5f5;
+            border: none;
+            font-size: 16px;
+            font-weight: 600;
+            color: #666;
+            transition: all 0.3s;
+        }
+        
+        .tab:hover {
+            background: #e0e0e0;
+        }
+        
+        .tab.active {
+            background: white;
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            resize: vertical;
+            min-height: 150px;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔒 MFA User Upload Portal</h1>
+            <p>Upload CSV files or enter users manually to add to MFA onboarding workflow</p>
+        </div>
+        
+        <div class="content">
+            <!-- Login Section -->
+            <div id="loginSection" class="login-section">
+                <p style="margin-bottom: 20px; color: #666;">Sign in with your Microsoft account to continue</p>
+                <button class="btn" onclick="signIn()">Sign In with Microsoft</button>
+            </div>
+            
+            <!-- Upload Section -->
+            <div id="uploadSection" style="display: none;">
+                <div class="user-info">
+                    <span>👤 Signed in as: <strong id="userName"></strong></span>
+                    <button class="btn" onclick="signOut()" style="float: right; padding: 8px 20px; font-size: 14px;">Sign Out</button>
+                    <div style="clear: both;"></div>
+                </div>
+                
+                <div class="info-box">
+                    <strong>📋 CSV Format:</strong> Your CSV must contain a column named <code>UPN</code>, <code>UserPrincipalName</code>, or <code>Email</code> with user email addresses.
+                </div>
+                
+                <!-- Tabs -->
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('csv')">📁 CSV Upload</button>
+                    <button class="tab" onclick="switchTab('manual')">✏️ Manual Entry</button>
+                    <button class="tab" onclick="switchTab('reports')">📊 Reports</button>
+                </div>
+                
+                <form id="uploadForm">
+                    <div class="form-group">
+                        <label for="batchId">Batch ID (optional - auto-generated if empty)</label>
+                        <input type="text" id="batchId" placeholder="e.g., 2026-01-Department-A">
+                    </div>
+                    
+                    <!-- CSV Upload Tab -->
+                    <div id="csvTab" class="tab-content active">
+                        <div class="form-group">
+                            <label for="csvFile">Select CSV File</label>
+                            <input type="file" id="csvFile" accept=".csv">
+                        </div>
+                    </div>
+                    
+                    <!-- Manual Entry Tab -->
+                    <div id="manualTab" class="tab-content">
+                        <div class="form-group">
+                            <label for="manualInput">Enter User Email Addresses</label>
+                            <textarea id="manualInput" placeholder="Enter email addresses (one per line or comma-separated):&#10;user1@contoso.com&#10;user2@contoso.com, user3@contoso.com"></textarea>
+                            <small style="color: #666; display: block; margin-top: 5px;">
+                                💡 Tip: Enter one email per line, or separate with commas
+                            </small>
+                        </div>
+                    </div>
+                    
+                    <!-- Reports Tab -->
+                    <div id="reportsTab" class="tab-content">
+                        <div style="text-align: center; margin: 20px 0;">
+                            <button type="button" class="btn" onclick="loadReports()" style="display: inline-block; width: auto; padding: 12px 40px;">
+                                🔄 Refresh Reports
+                            </button>
+                        </div>
+                        
+                        <div id="reportsLoading" class="loading" style="display: none;">
+                            <div class="spinner"></div>
+                            <p>Loading reports from SharePoint...</p>
+                        </div>
+                        
+                        <div id="reportsContent" style="display: none;">
+                            <!-- Executive Summary -->
+                            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 12px; margin-bottom: 30px;">
+                                <h2 style="margin: 0 0 20px 0; color: white;">📊 MFA Rollout Dashboard</h2>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px;">
+                                    <div style="text-align: center;">
+                                        <div style="font-size: 36px; font-weight: bold;" id="totalUsers">0</div>
+                                        <div style="font-size: 14px; opacity: 0.9;">Total Users</div>
+                                    </div>
+                                    <div style="text-align: center;">
+                                        <div style="font-size: 36px; font-weight: bold; color: #4caf50;" id="completedUsers">0</div>
+                                        <div style="font-size: 14px; opacity: 0.9;">Completed</div>
+                                    </div>
+                                    <div style="text-align: center;">
+                                        <div style="font-size: 36px; font-weight: bold; color: #ff9800;" id="pendingUsers">0</div>
+                                        <div style="font-size: 14px; opacity: 0.9;">Pending</div>
+                                    </div>
+                                    <div style="text-align: center;">
+                                        <div style="font-size: 36px; font-weight: bold;" id="completionRate">0%</div>
+                                        <div style="font-size: 14px; opacity: 0.9;">Completion Rate</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Status Breakdown -->
+                            <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 25px;">
+                                <h3 style="margin-top: 0; color: #333;">Status Breakdown</h3>
+                                <div id="statusBreakdown"></div>
+                            </div>
+                            
+                            <!-- Recent Activity -->
+                            <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 25px;">
+                                <h3 style="margin-top: 0; color: #333;">Recent Activity (Last 7 Days)</h3>
+                                <div id="recentActivity"></div>
+                            </div>
+                            
+                            <!-- Users Needing Attention -->
+                            <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 25px;">
+                                <h3 style="margin-top: 0; color: #333;">⚠️ Users Needing Attention</h3>
+                                <div id="needsAttention"></div>
+                            </div>
+                            
+                            <!-- Batch Performance -->
+                            <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+                                <h3 style="margin-top: 0; color: #333;">Batch Performance</h3>
+                                <div id="batchPerformance"></div>
+                            </div>
+                        </div>
+                        
+                        <div id="reportsError" style="display: none; padding: 20px; background: #ffebee; border-radius: 8px; color: #c62828;">
+                            <strong>❌ Error loading reports:</strong>
+                            <div id="reportsErrorMessage" style="margin-top: 10px;"></div>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn" id="uploadBtn">📤 Upload Users</button>
+                </form>
+                
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>Uploading and processing users...</p>
+                </div>
+                
+                <div class="results" id="results">
+                    <h3>Upload Results</h3>
+                    <div class="stat">
+                        <div class="stat-label">Total</div>
+                        <div class="stat-value" id="totalCount">0</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Added</div>
+                        <div class="stat-value" id="addedCount" style="color: #4caf50;">0</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Updated</div>
+                        <div class="stat-value" id="updatedCount" style="color: #2196f3;">0</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Skipped</div>
+                        <div class="stat-value" id="skippedCount" style="color: #ff9800;">0</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-label">Errors</div>
+                        <div class="stat-value" id="errorCount" style="color: #f44336;">0</div>
+                    </div>
+                    
+                    <div id="errorSection" style="display: none;">
+                        <h4 style="margin-top: 20px; color: #f44336;">❌ Errors:</h4>
+                        <div class="error-list" id="errorList"></div>
+                    </div>
+                    
+                    <div id="skippedSection" style="display: none;">
+                        <h4 style="margin-top: 20px; color: #ff9800;">⚠️ Skipped:</h4>
+                        <div class="skipped-list" id="skippedList"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // MSAL Configuration - REPLACE THESE VALUES DURING DEPLOYMENT
+        const msalConfig = {
+            auth: {
+                clientId: "YOUR_CLIENT_ID_HERE", // Will be replaced by deployment script
+                authority: "https://login.microsoftonline.com/YOUR_TENANT_ID_HERE",
+                redirectUri: window.location.href.split('?')[0].split('#')[0]
+            }
+        };
+        
+        const functionAppUrl = "YOUR_FUNCTION_APP_URL_HERE"; // Will be replaced by deployment script
+        
+        const msalInstance = new msal.PublicClientApplication(msalConfig);
+        let account = null;
+        
+        // Initialize
+        window.addEventListener('DOMContentLoaded', async () => {
+            await msalInstance.initialize();
+            
+            // Check if user is already signed in
+            const accounts = msalInstance.getAllAccounts();
+            if (accounts.length > 0) {
+                account = accounts[0];
+                showUploadSection();
+            }
+        });
+        
+        async function signIn() {
+            try {
+                const loginResponse = await msalInstance.loginPopup({
+                    scopes: ["user.read"]
+                });
+                account = loginResponse.account;
+                showUploadSection();
+            } catch (error) {
+                console.error('Login error:', error);
+                alert('Failed to sign in: ' + error.message);
+            }
+        }
+        
+        function signOut() {
+            msalInstance.logoutPopup();
+        }
+        
+        function showUploadSection() {
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('uploadSection').style.display = 'block';
+            document.getElementById('userName').textContent = account.username;
+        }
+        
+        // Tab switching
+        let activeTab = 'csv';
+        
+        function switchTab(tabName) {
+            activeTab = tabName;
+            
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(tabName + 'Tab').classList.add('active');
+        }
+        
+        // Convert manual input to CSV format
+        function manualInputToCSV(input) {
+            // Split by newlines and/or commas
+            const emails = input
+                .split(/[\n,]+/)
+                .map(email => email.trim())
+                .filter(email => email.length > 0);
+            
+            // Create CSV with UPN header
+            return 'UPN\n' + emails.join('\n');
+        }
+        
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const batchIdInput = document.getElementById('batchId');
+            let csvContent = '';
+            
+            // Get CSV content based on active tab
+            if (activeTab === 'csv') {
+                const fileInput = document.getElementById('csvFile');
+                if (!fileInput.files[0]) {
+                    alert('Please select a CSV file');
+                    return;
+                }
+                
+                // Read file
+                const file = fileInput.files[0];
+                csvContent = await new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (event) => resolve(event.target.result);
+                    reader.readAsText(file);
+                });
+            } else {
+                // Manual input
+                const manualInput = document.getElementById('manualInput').value.trim();
+                if (!manualInput) {
+                    alert('Please enter at least one email address');
+                    return;
+                }
+                csvContent = manualInputToCSV(manualInput);
+            }
+            
+            const batchId = batchIdInput.value.trim();
+            
+            // Show loading
+            document.getElementById('uploadBtn').disabled = true;
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('results').classList.remove('show');
+            
+            try {
+                // Get access token
+                const tokenResponse = await msalInstance.acquireTokenSilent({
+                    scopes: ["user.read"],
+                    account: account
+                });
+                
+                // Upload to Function App
+                const response = await fetch(`${functionAppUrl}/api/upload-users`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${tokenResponse.accessToken}`
+                },
+                body: JSON.stringify({
+                    csv: csvContent,
+                    batchId: batchId
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(result.error || 'Upload failed');
+            }
+            
+            // Display results
+            displayResults(result);
+            
+            // Reset form based on active tab
+            if (activeTab === 'csv') {
+                document.getElementById('csvFile').value = '';
+            } else {
+                document.getElementById('manualInput').value = '';
+            }
+            batchIdInput.value = '';
+        } catch (error) {
+            console.error('Upload error:', error);
+            alert('Upload failed: ' + error.message);
+        } finally {
+            document.getElementById('uploadBtn').disabled = false;
+            document.getElementById('loading').classList.remove('show');
+        }
+    });
+        
+        function displayResults(result) {
+            document.getElementById('totalCount').textContent = result.total || 0;
+            document.getElementById('addedCount').textContent = result.added?.length || 0;
+            document.getElementById('updatedCount').textContent = result.updated?.length || 0;
+            document.getElementById('skippedCount').textContent = result.skipped?.length || 0;
+            document.getElementById('errorCount').textContent = result.errors?.length || 0;
+            
+            // Show errors if any
+            if (result.errors && result.errors.length > 0) {
+                const errorList = document.getElementById('errorList');
+                errorList.innerHTML = result.errors.map(e => 
+                    `<div class="error-item"><strong>${e.upn}</strong>: ${e.error}</div>`
+                ).join('');
+                document.getElementById('errorSection').style.display = 'block';
+            } else {
+                document.getElementById('errorSection').style.display = 'none';
+            }
+            
+            // Show skipped if any
+            if (result.skipped && result.skipped.length > 0) {
+                const skippedList = document.getElementById('skippedList');
+                skippedList.innerHTML = result.skipped.map(s => 
+                    `<div class="skipped-item"><strong>${s.upn}</strong>: ${s.reason}</div>`
+                ).join('');
+                document.getElementById('skippedSection').style.display = 'block';
+            } else {
+                document.getElementById('skippedSection').style.display = 'none';
+            }
+            
+            document.getElementById('results').classList.add('show');
+        }
+        
+        // Load reports from SharePoint
+        async function loadReports() {
+            const reportsLoading = document.getElementById('reportsLoading');
+            const reportsContent = document.getElementById('reportsContent');
+            const reportsError = document.getElementById('reportsError');
+            
+            reportsLoading.style.display = 'block';
+            reportsContent.style.display = 'none';
+            reportsError.style.display = 'none';
+            
+            try {
+                // Get access token
+                const accounts = myMSALObj.getAllAccounts();
+                if (accounts.length === 0) {
+                    throw new Error('Please sign in first');
+                }
+                
+                const tokenRequest = {
+                    scopes: ["Sites.Read.All"],
+                    account: accounts[0]
+                };
+                
+                const response = await myMSALObj.acquireTokenSilent(tokenRequest);
+                const accessToken = response.accessToken;
+                
+                // Get SharePoint list items via Graph API
+                // Note: This requires the SharePoint site URL and List ID
+                // These should be configured in the deployment
+                const siteUrl = 'YOUR_SHAREPOINT_SITE_URL_HERE'; // Will be replaced by deployment
+                const listId = 'YOUR_SHAREPOINT_LIST_ID_HERE'; // Will be replaced by deployment
+                
+                // Extract site domain and path from URL
+                const siteUri = new URL(siteUrl);
+                const siteDomain = siteUri.hostname;
+                const sitePath = siteUri.pathname;
+                
+                // Get all list items
+                const graphUrl = `https://graph.microsoft.com/v1.0/sites/${siteDomain}:${sitePath}:/lists/${listId}/items?$expand=fields&$top=5000`;
+                
+                const listResponse = await fetch(graphUrl, {
+                    headers: {
+                        'Authorization': 'Bearer ' + accessToken
+                    }
+                });
+                
+                if (!listResponse.ok) {
+                    throw new Error(`Failed to fetch data: ${listResponse.statusText}`);
+                }
+                
+                const listData = await listResponse.json();
+                const items = listData.value.map(item => item.fields);
+                
+                // Generate reports
+                generateReports(items);
+                
+                reportsLoading.style.display = 'none';
+                reportsContent.style.display = 'block';
+            } catch (error) {
+                console.error('Error loading reports:', error);
+                reportsLoading.style.display = 'none';
+                reportsError.style.display = 'block';
+                document.getElementById('reportsErrorMessage').textContent = error.message;
+            }
+        }
+        
+        function generateReports(items) {
+            // Executive Summary
+            const totalUsers = items.length;
+            const completedUsers = items.filter(i => i.InGroup === true || i.InviteStatus === 'AddedToGroup' || i.InviteStatus === 'Active').length;
+            const pendingUsers = totalUsers - completedUsers;
+            const completionRate = totalUsers > 0 ? Math.round((completedUsers / totalUsers) * 100) : 0;
+            
+            document.getElementById('totalUsers').textContent = totalUsers;
+            document.getElementById('completedUsers').textContent = completedUsers;
+            document.getElementById('pendingUsers').textContent = pendingUsers;
+            document.getElementById('completionRate').textContent = completionRate + '%';
+            
+            // Status Breakdown
+            const statusCounts = {};
+            items.forEach(item => {
+                const status = item.InviteStatus || 'Unknown';
+                statusCounts[status] = (statusCounts[status] || 0) + 1;
+            });
+            
+            let statusHTML = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">';
+            for (const [status, count] of Object.entries(statusCounts).sort((a, b) => b[1] - a[1])) {
+                const percentage = Math.round((count / totalUsers) * 100);
+                statusHTML += `
+                    <div style="padding: 15px; background: #f5f5f5; border-radius: 8px; border-left: 4px solid #667eea;">
+                        <div style="font-size: 24px; font-weight: bold; color: #667eea;">${count}</div>
+                        <div style="font-size: 14px; color: #666; margin: 5px 0;">${status}</div>
+                        <div style="font-size: 12px; color: #999;">${percentage}%</div>
+                    </div>
+                `;
+            }
+            statusHTML += '</div>';
+            document.getElementById('statusBreakdown').innerHTML = statusHTML;
+            
+            // Recent Activity (Last 7 days)
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            
+            const recentInvites = items.filter(i => {
+                if (!i.InviteSentDate) return false;
+                const date = new Date(i.InviteSentDate);
+                return date >= sevenDaysAgo;
+            }).length;
+            
+            const recentClicks = items.filter(i => {
+                if (!i.ClickedLinkDate) return false;
+                const date = new Date(i.ClickedLinkDate);
+                return date >= sevenDaysAgo;
+            }).length;
+            
+            const recentAdded = items.filter(i => {
+                if (!i.AddedToGroupDate) return false;
+                const date = new Date(i.AddedToGroupDate);
+                return date >= sevenDaysAgo;
+            }).length;
+            
+            document.getElementById('recentActivity').innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px;">
+                    <div style="text-align: center; padding: 15px; background: #e3f2fd; border-radius: 8px;">
+                        <div style="font-size: 28px; font-weight: bold; color: #1976d2;">${recentInvites}</div>
+                        <div style="font-size: 14px; color: #666;">Invites Sent</div>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: #fff3e0; border-radius: 8px;">
+                        <div style="font-size: 28px; font-weight: bold; color: #f57c00;">${recentClicks}</div>
+                        <div style="font-size: 14px; color: #666;">Links Clicked</div>
+                    </div>
+                    <div style="text-align: center; padding: 15px; background: #e8f5e9; border-radius: 8px;">
+                        <div style="font-size: 28px; font-weight: bold; color: #388e3c;">${recentAdded}</div>
+                        <div style="font-size: 14px; color: #666;">Added to Group</div>
+                    </div>
+                </div>
+            `;
+            
+            // Users Needing Attention
+            const threeDaysAgo = new Date();
+            threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+            
+            const needsAttentionUsers = items.filter(i => {
+                // Invited but haven't clicked in 3+ days
+                if (i.InviteSentDate && !i.ClickedLinkDate) {
+                    const inviteDate = new Date(i.InviteSentDate);
+                    if (inviteDate < threeDaysAgo) return true;
+                }
+                // Clicked but not added to group
+                if (i.ClickedLinkDate && !i.InGroup) {
+                    return true;
+                }
+                return false;
+            });
+            
+            if (needsAttentionUsers.length > 0) {
+                let attentionHTML = `<div style="max-height: 300px; overflow-y: auto;">`;
+                attentionHTML += '<table style="width: 100%; border-collapse: collapse;">';
+                attentionHTML += '<tr style="background: #f5f5f5; text-align: left;"><th style="padding: 10px;">User</th><th>Status</th><th>Issue</th></tr>';
+                
+                needsAttentionUsers.slice(0, 20).forEach(user => {
+                    let issue = '';
+                    if (user.InviteSentDate && !user.ClickedLinkDate) {
+                        const daysSince = Math.floor((new Date() - new Date(user.InviteSentDate)) / (1000 * 60 * 60 * 24));
+                        issue = `No click (${daysSince} days)`;
+                    } else if (user.ClickedLinkDate && !user.InGroup) {
+                        issue = 'Clicked but not in group';
+                    }
+                    
+                    attentionHTML += `
+                        <tr style="border-bottom: 1px solid #eee;">
+                            <td style="padding: 10px;">${user.Title || 'N/A'}</td>
+                            <td style="padding: 10px;">${user.InviteStatus || 'Unknown'}</td>
+                            <td style="padding: 10px; color: #f57c00;">${issue}</td>
+                        </tr>
+                    `;
+                });
+                
+                attentionHTML += '</table></div>';
+                if (needsAttentionUsers.length > 20) {
+                    attentionHTML += `<div style="margin-top: 10px; color: #666; font-size: 14px;">Showing 20 of ${needsAttentionUsers.length} users</div>`;
+                }
+                document.getElementById('needsAttention').innerHTML = attentionHTML;
+            } else {
+                document.getElementById('needsAttention').innerHTML = '<p style="color: #4caf50;">✓ No users need immediate attention</p>';
+            }
+            
+            // Batch Performance
+            const batches = {};
+            items.forEach(item => {
+                const batchId = item.SourceBatchId || 'No Batch';
+                if (!batches[batchId]) {
+                    batches[batchId] = { total: 0, completed: 0 };
+                }
+                batches[batchId].total++;
+                if (item.InGroup === true || item.InviteStatus === 'AddedToGroup' || item.InviteStatus === 'Active') {
+                    batches[batchId].completed++;
+                }
+            });
+            
+            let batchHTML = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">';
+            for (const [batchId, stats] of Object.entries(batches).sort((a, b) => b[1].total - a[1].total)) {
+                const rate = Math.round((stats.completed / stats.total) * 100);
+                const color = rate >= 80 ? '#4caf50' : rate >= 50 ? '#ff9800' : '#f44336';
+                
+                batchHTML += `
+                    <div style="padding: 15px; background: #f5f5f5; border-radius: 8px; border-left: 4px solid ${color};">
+                        <div style="font-weight: bold; margin-bottom: 5px;">${batchId}</div>
+                        <div style="font-size: 24px; font-weight: bold; color: ${color};">${rate}%</div>
+                        <div style="font-size: 14px; color: #666;">${stats.completed} of ${stats.total} complete</div>
+                    </div>
+                `;
+            }
+            batchHTML += '</div>';
+            document.getElementById('batchPerformance').innerHTML = batchHTML;
+        }
+    </script>
+</body>
+</html>

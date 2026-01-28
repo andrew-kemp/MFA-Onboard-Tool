@@ -1,0 +1,48 @@
+[Deployment]
+Step01_Prerequisites=Complete
+Step02_SharePointAndGroup=Complete
+Step03_SharedMailbox=Complete
+Step04_AzureResources=Complete
+Step05_FunctionApp=Complete
+Step06_LogicApp=Complete
+Step07_UploadPortal=Complete
+
+[Tenant]
+TenantId=74214193-01af-4cfe-9128-afdb4346dd3f
+SubscriptionId=c2c6a139-16f1-46fd-bcac-60bd2bed8c2f
+
+[SharePoint]
+SiteUrl=https://andykempdev.sharepoint.com/sites/MFA
+SiteOwner=admin@andykempdev.onmicrosoft.com
+ListTitle=MFA Onboarding
+ClientId=15bfedbe-04c8-454c-875b-c54451c9edb6
+CertificatePath=C:\ANdyKempDev\cert-output\AKD-SPO-Automation-MFA.pfx
+CertificateThumbprint=BEE811E1E83B3D631C27DE5ED7AF10EA25628816
+
+SiteTitle=MFA Ops
+AppRegName=AKD-SPO-Automation-MFA
+[Security]
+MFAGroupId=c2ba6a40-30b0-480e-b482-1c502dbcea56
+MFAGroupName=MFA Enabled Users
+
+MFAGroupMail=
+[Azure]
+ResourceGroup=rg-mfa-onboarding
+Region=uksouth
+FunctionAppName=func-mfa-enrol-534430
+StorageAccountName=stmfa534430
+MFAPrincipalId=0940a1c6-4f75-448d-84d3-deff9c020b27
+
+[Email]
+MailboxName=MFA Registration
+NoReplyMailbox=MFA-Registration@andykempdev.onmicrosoft.com
+MailboxDelegate=admin@andykempdev.onmicrosoft.com
+EmailSubject=
+
+[LogicApp]
+LogicAppName=mfa-invite-orchestrator
+
+[UploadPortal]
+ClientId=6512b74b-4b2a-4b91-bd58-8af849aa7788
+AppName=AKD-MFA-Upload-Portal
+AppRegName=AKD-MFA-Upload-Portal
