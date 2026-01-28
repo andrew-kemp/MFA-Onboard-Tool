@@ -10,7 +10,7 @@ The easiest way to deploy the MFA Onboarding solution is with the included boots
 
 1. Download the bootstrap script:
    ```powershell
-   wget https://raw.githubusercontent.com/andrew-kemp/MFA-Registration/main/Get-MFAOnboarder.ps1 -OutFile Get-MFAOnboarder.ps1
+   wget https://raw.githubusercontent.com/andrew-kemp/MFA-Onboard-Tool/main/Get-MFAOnboarder.ps1 -OutFile Get-MFAOnboarder.ps1
    ```
 
 2. Open PowerShell 7 (pwsh):
