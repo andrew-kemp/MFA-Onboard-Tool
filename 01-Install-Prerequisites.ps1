@@ -634,8 +634,33 @@ try {
     }
     Set-IniValue -Path $configFile -Section "LogicApp" -Key "LogicAppName" -Value $logicAppName
     
+    # Logic App Recurrence Frequency
+    Write-Host "`nLogic App Trigger Schedule:" -ForegroundColor Cyan
+    Write-Host "How often should the invitation Logic App check for new users?" -ForegroundColor Gray
+    Write-Host "  1 = Every hour (high frequency)" -ForegroundColor Gray
+    Write-Host "  2 = Every 2 hours" -ForegroundColor Gray
+    Write-Host "  4 = Every 4 hours" -ForegroundColor Gray
+    Write-Host "  8 = Every 8 hours" -ForegroundColor Gray
+    Write-Host "  12 = Every 12 hours (recommended)" -ForegroundColor Gray
+    Write-Host "  24 = Once per day (low frequency)" -ForegroundColor Gray
+    
+    $currentRecurrence = $config["LogicApp"]["RecurrenceHours"]
+    $defaultRecurrence = if ([string]::IsNullOrWhiteSpace($currentRecurrence)) { "12" } else { $currentRecurrence }
+    
+    do {
+        $prompt = Read-Host "Select frequency in hours [$defaultRecurrence]"
+        $recurrenceHours = if ([string]::IsNullOrWhiteSpace($prompt)) { $defaultRecurrence } else { $prompt }
+        $validFrequencies = @("1", "2", "4", "8", "12", "24")
+        if ($recurrenceHours -notin $validFrequencies) {
+            Write-Host "Invalid selection. Please choose: 1, 2, 4, 8, 12, or 24" -ForegroundColor Yellow
+        }
+    } while ($recurrenceHours -notin $validFrequencies)
+    
+    Set-IniValue -Path $configFile -Section "LogicApp" -Key "RecurrenceHours" -Value $recurrenceHours
+    Write-Host "✓ Logic App will check for new users every $recurrenceHours hour(s)" -ForegroundColor Green
+    
     # Function App and Storage names will be auto-generated with random suffixes in Step 04
-    Write-Host "Function App and Storage Account names will be auto-generated with unique suffixes." -ForegroundColor Gray
+    Write-Host "`nFunction App and Storage Account names will be auto-generated with unique suffixes." -ForegroundColor Gray
     
     Write-Host "`n✓ Configuration saved to mfa-config.ini" -ForegroundColor Green
     

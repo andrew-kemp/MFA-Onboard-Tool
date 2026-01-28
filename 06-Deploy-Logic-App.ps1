@@ -74,11 +74,14 @@ try {
     $resourceGroup = $config["Azure"]["ResourceGroup"]
     $region = $config["Azure"]["Region"]
     $logicAppName = $config["LogicApp"]["LogicAppName"]
+    $recurrenceHours = $config["LogicApp"]["RecurrenceHours"]
+    if ([string]::IsNullOrWhiteSpace($recurrenceHours)) { $recurrenceHours = "12" }
     $siteUrl = $config["SharePoint"]["SiteUrl"]
     $functionAppName = $config["Azure"]["FunctionAppName"]
     
     Write-Host "Logic App Name: $logicAppName" -ForegroundColor Gray
-    Write-Host "Resource Group: $resourceGroup`n" -ForegroundColor Gray
+    Write-Host "Resource Group: $resourceGroup" -ForegroundColor Gray
+    Write-Host "Recurrence: Every $recurrenceHours hour(s)`n" -ForegroundColor Gray
     
     # Create Logic App with Managed Identity
     Write-Host "Creating Logic App with Managed Identity..." -ForegroundColor Yellow
@@ -326,6 +329,9 @@ try {
     $logicAppJsonRaw = Get-Content $logicAppJsonPath -Raw
     
     # Replace placeholders with actual values
+    $logicAppJsonRaw = $logicAppJsonRaw.Replace("RECURRENCE_HOURS_PLACEHOLDER", $recurrenceHours)
+    Write-Host "  ✓ Recurrence: Every $recurrenceHours hour(s)" -ForegroundColor Gray
+    
     $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_FUNCTION_URL", $functionUrl)
     Write-Host "  ✓ Function URL: $functionUrl" -ForegroundColor Gray
     

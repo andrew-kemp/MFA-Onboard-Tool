@@ -8,7 +8,7 @@
                                                            "Recurrence":  {
                                                                               "type":  "Recurrence",
                                                                               "recurrence":  {
-                                                                                                 "interval":  12,
+                                                                                                 "interval":  RECURRENCE_HOURS_PLACEHOLDER,
                                                                                                  "frequency":  "Hour"
                                                                                              }
                                                                           }

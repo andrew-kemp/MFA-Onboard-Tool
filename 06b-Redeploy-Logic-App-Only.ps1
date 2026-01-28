@@ -38,6 +38,8 @@ try {
     $resourceGroup = $config["Azure"]["ResourceGroup"]
     $region = $config["Azure"]["Region"]
     $logicAppName = $config["LogicApp"]["LogicAppName"]
+    $recurrenceHours = $config["LogicApp"]["RecurrenceHours"]
+    if ([string]::IsNullOrWhiteSpace($recurrenceHours)) { $recurrenceHours = "12" }
     $siteUrl = $config["SharePoint"]["SiteUrl"]
     $listId = $config["SharePoint"]["ListId"]
     $functionAppName = $config["Azure"]["FunctionAppName"]
@@ -48,6 +50,7 @@ try {
     Write-Host "Configuration:" -ForegroundColor Gray
     Write-Host "  Logic App: $logicAppName" -ForegroundColor Gray
     Write-Host "  Resource Group: $resourceGroup" -ForegroundColor Gray
+    Write-Host "  Recurrence: Every $recurrenceHours hour(s)" -ForegroundColor Gray
     Write-Host "  SharePoint: $siteUrl" -ForegroundColor Gray
     Write-Host "  List ID: $listId`n" -ForegroundColor Gray
     
@@ -73,6 +76,9 @@ try {
     Write-Host "Updating values from INI..." -ForegroundColor Yellow
     
     # Replace placeholders with actual values
+    $logicAppJsonRaw = $logicAppJsonRaw.Replace("RECURRENCE_HOURS_PLACEHOLDER", $recurrenceHours)
+    Write-Host "  ✓ Recurrence: Every $recurrenceHours hour(s)" -ForegroundColor Gray
+    
     $functionUrl = "https://$functionAppName.azurewebsites.net/api/track-mfa-click"
     $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_FUNCTION_URL", $functionUrl)
     Write-Host "  ✓ Function URL: $functionUrl" -ForegroundColor Gray
