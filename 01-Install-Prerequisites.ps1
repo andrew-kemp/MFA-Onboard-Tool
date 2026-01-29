@@ -527,14 +527,16 @@ try {
     
     # Logo URL
     $currentLogo = if ($config.ContainsKey("Branding") -and $config["Branding"].ContainsKey("LogoUrl")) { $config["Branding"]["LogoUrl"] } else { $null }
-    $defaultLogo = "https://www.cygnetgroup.com/wp-content/uploads/2015/11/new-news-image.jpg"
     if ([string]::IsNullOrWhiteSpace($currentLogo)) {
-        Write-Host "`nCompany logo URL (leave blank for default Cygnet logo)" -ForegroundColor Gray
-        $logoPrompt = Read-Host "Logo URL"
-        $logoUrl = if ([string]::IsNullOrWhiteSpace($logoPrompt)) { $defaultLogo } else { $logoPrompt }
+        Write-Host "`nCompany logo URL (leave blank for no logo)" -ForegroundColor Gray
+        $logoUrl = Read-Host "Logo URL"
     } else {
-        $prompt = Read-Host "`nLogo URL [$currentLogo] (leave blank to keep current)"
-        $logoUrl = if ([string]::IsNullOrWhiteSpace($prompt)) { $currentLogo } else { $prompt }
+        $prompt = Read-Host "`nLogo URL [$currentLogo] (leave blank to keep current, enter 'none' to remove)"
+        if ($prompt -eq 'none') {
+            $logoUrl = ""
+        } else {
+            $logoUrl = if ([string]::IsNullOrWhiteSpace($prompt)) { $currentLogo } else { $prompt }
+        }
     }
     Set-IniValue -Path $configFile -Section "Branding" -Key "LogoUrl" -Value $logoUrl
     
