@@ -341,8 +341,11 @@
                     <!-- Reports Tab -->
                     <div id="reportsTab" class="tab-content">
                         <div style="text-align: center; margin: 20px 0;">
-                            <button type="button" class="btn" onclick="loadReports()" style="display: inline-block; width: auto; padding: 12px 40px;">
+                            <button type="button" class="btn" onclick="loadReports()" style="display: inline-block; width: auto; padding: 12px 40px; margin-right: 10px;">
                                 🔄 Refresh Reports
+                            </button>
+                            <button type="button" class="btn" onclick="sendReportEmail()" style="display: inline-block; width: auto; padding: 12px 40px; background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);">
+                                📧 Email Report
                             </button>
                         </div>
                         
@@ -358,11 +361,11 @@
                                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px;">
                                     <div style="text-align: center;">
                                         <div style="font-size: 36px; font-weight: bold;" id="totalUsers">0</div>
-                                        <div style="font-size: 14px; opacity: 0.9;">Total Users</div>
+                                        <div style="font-size: 14px; opacity: 0.9;">Users in Group</div>
                                     </div>
                                     <div style="text-align: center;">
                                         <div style="font-size: 36px; font-weight: bold; color: #4caf50;" id="completedUsers">0</div>
-                                        <div style="font-size: 14px; opacity: 0.9;">Completed</div>
+                                        <div style="font-size: 14px; opacity: 0.9;">MFA Active</div>
                                     </div>
                                     <div style="text-align: center;">
                                         <div style="font-size: 36px; font-weight: bold; color: #ff9800;" id="pendingUsers">0</div>
@@ -373,6 +376,13 @@
                                         <div style="font-size: 14px; opacity: 0.9;">Completion Rate</div>
                                     </div>
                                 </div>
+                            </div>
+                            
+                            <!-- High Reminder Alert -->
+                            <div style="background: #ffebee; padding: 20px; border-radius: 12px; border-left: 5px solid #f44336; margin-bottom: 25px;">
+                                <h3 style="margin-top: 0; color: #c62828;">⚠️ Attention Required</h3>
+                                <div style="font-size: 32px; font-weight: bold; color: #f44336; margin: 10px 0;" id="highReminderUsers">0</div>
+                                <div style="font-size: 14px; color: #666;">Users on 2+ reminders</div>
                             </div>
                             
                             <!-- Status Breakdown -->
@@ -755,14 +765,21 @@
         function generateReports(items) {
             // Executive Summary
             const totalUsers = items.length;
-            const completedUsers = items.filter(i => i.InGroup === true || i.InviteStatus === 'AddedToGroup' || i.InviteStatus === 'Active').length;
-            const pendingUsers = totalUsers - completedUsers;
-            const completionRate = totalUsers > 0 ? Math.round((completedUsers / totalUsers) * 100) : 0;
+            const mfaActiveUsers = items.filter(i => i.InGroup === true).length;
+            const pendingUsers = totalUsers - mfaActiveUsers;
+            const highReminderUsers = items.filter(i => (i.ReminderCount || 0) >= 2).length;
+            const completionRate = totalUsers > 0 ? Math.round((mfaActiveUsers / totalUsers) * 100) : 0;
             
             document.getElementById('totalUsers').textContent = totalUsers;
-            document.getElementById('completedUsers').textContent = completedUsers;
+            document.getElementById('completedUsers').textContent = mfaActiveUsers;
             document.getElementById('pendingUsers').textContent = pendingUsers;
             document.getElementById('completionRate').textContent = completionRate + '%';
+            
+            // Add high reminder count if element exists
+            const highReminderElement = document.getElementById('highReminderUsers');
+            if (highReminderElement) {
+                highReminderElement.textContent = highReminderUsers;
+            }
             
             // Status Breakdown
             const statusCounts = {};
@@ -901,6 +918,62 @@
             }
             batchHTML += '</div>';
             document.getElementById('batchPerformance').innerHTML = batchHTML;
+        }
+        
+        // Send report email
+        async function sendReportEmail() {
+            const recipient = prompt('Enter email address to send report to:');
+            if (!recipient) return;
+            
+            // Validate email format
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(recipient)) {
+                alert('Please enter a valid email address');
+                return;
+            }
+            
+            try {
+                // Get current report data
+                const totalUsers = document.getElementById('totalUsers').textContent;
+                const mfaActive = document.getElementById('completedUsers').textContent;
+                const pending = document.getElementById('pendingUsers').textContent;
+                const highReminders = document.getElementById('highReminderUsers').textContent;
+                const completionRate = document.getElementById('completionRate').textContent;
+                
+                // Get token
+                const tokenResponse = await msalInstance.acquireTokenSilent({
+                    scopes: ["user.read"],
+                    account: account
+                });
+                
+                // Send via Function App endpoint
+                const response = await fetch(`${functionAppUrl}/api/send-report`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${tokenResponse.accessToken}`
+                    },
+                    body: JSON.stringify({
+                        recipient: recipient,
+                        stats: {
+                            totalUsers,
+                            mfaActive,
+                            pending,
+                            highReminders,
+                            completionRate
+                        }
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('Failed to send email');
+                }
+                
+                alert(`Report sent successfully to ${recipient}`);
+            } catch (error) {
+                console.error('Error sending report:', error);
+                alert('Failed to send report: ' + error.message + '\\n\\nNote: Email sending from portal requires administrator setup. Please use the automated reports instead.');
+            }
         }
     </script>
 </body>

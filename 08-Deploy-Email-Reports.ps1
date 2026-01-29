@@ -242,7 +242,7 @@ try {
     }
 
     $rawEmailTemplate = @'
-<html><body style="font-family: Segoe UI, Arial, sans-serif;"><div style="max-width: 600px; margin: 0 auto; padding: 20px;">LOGO_PLACEHOLDER<div style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 30px; border-radius: 12px; margin-bottom: 20px;"><h1 style="margin: 0; font-size: 28px;">📊 MFA Rollout Report</h1><p style="margin: 10px 0 0 0; opacity: 0.9;">@{utcNow('dddd, MMMM dd, yyyy')}</p></div><div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin-bottom: 20px;"><h2 style="margin-top: 0; color: #333;">Executive Summary</h2><table style="width: 100%; border-collapse: collapse;"><tr><td style="padding: 15px; background: white; border-radius: 8px; text-align: center; margin: 5px;"><div style="font-size: 36px; font-weight: bold; color: #1e3c72;">@{variables('totalCount')}</div><div style="font-size: 14px; color: #666;">Total Users</div></td><td style="padding: 15px; background: white; border-radius: 8px; text-align: center; margin: 5px;"><div style="font-size: 36px; font-weight: bold; color: #4caf50;">@{variables('completedCount')}</div><div style="font-size: 14px; color: #666;">Completed</div></td></tr><tr><td style="padding: 15px; background: white; border-radius: 8px; text-align: center; margin: 5px;"><div style="font-size: 36px; font-weight: bold; color: #ff9800;">@{variables('pendingCount')}</div><div style="font-size: 14px; color: #666;">Pending</div></td><td style="padding: 15px; background: white; border-radius: 8px; text-align: center; margin: 5px;"><div style="font-size: 36px; font-weight: bold; color: #1e3c72;">@{outputs('Calculate_Completion_Rate')}%</div><div style="font-size: 14px; color: #666;">Completion Rate</div></td></tr></table></div><div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0;"><h3 style="margin-top: 0; color: #333;">Quick Links</h3><p><a href="$SITE_URL" style="color: #1e3c72; text-decoration: none;">📋 View SharePoint List</a></p><p><a href="$PORTAL_URL" style="color: #1e3c72; text-decoration: none;">📤 Upload Portal</a></p></div><div style="margin-top: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;"><p style="margin: 0; font-size: 14px; color: #1976d2;"><strong>💡 Tip:</strong> Log in to the Upload Portal and visit the Reports tab for detailed analytics and user-level breakdowns.</p></div></div></body></html>
+<html><body style="font-family: Segoe UI, Arial, sans-serif;"><div style="max-width: 600px; margin: 0 auto; padding: 20px;">LOGO_PLACEHOLDER<div style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 30px; border-radius: 12px; margin-bottom: 20px;"><h1 style="margin: 0; font-size: 28px;">📊 MFA Rollout Report</h1><p style="margin: 10px 0 0 0; opacity: 0.9;">@{utcNow('dddd, MMMM dd, yyyy')}</p></div><div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin-bottom: 20px;"><h2 style="margin-top: 0; color: #333;">Executive Summary</h2><table style="width: 100%; border-collapse: collapse;"><tr><td style="padding: 15px; background: white; border-radius: 8px; text-align: center; margin: 5px;"><div style="font-size: 36px; font-weight: bold; color: #1e3c72;">@{variables('totalCount')}</div><div style="font-size: 14px; color: #666;">Users in Group</div></td><td style="padding: 15px; background: white; border-radius: 8px; text-align: center; margin: 5px;"><div style="font-size: 36px; font-weight: bold; color: #4caf50;">@{variables('mfaActiveCount')}</div><div style="font-size: 14px; color: #666;">MFA Active</div></td></tr><tr><td style="padding: 15px; background: white; border-radius: 8px; text-align: center; margin: 5px;"><div style="font-size: 36px; font-weight: bold; color: #ff9800;">@{variables('pendingCount')}</div><div style="font-size: 14px; color: #666;">Pending</div></td><td style="padding: 15px; background: white; border-radius: 8px; text-align: center; margin: 5px;"><div style="font-size: 36px; font-weight: bold; color: #1e3c72;">@{outputs('Calculate_Completion_Rate')}%</div><div style="font-size: 14px; color: #666;">Completion Rate</div></td></tr></table></div><div style="background: #ffebee; padding: 15px 20px; border-radius: 8px; border-left: 4px solid #f44336; margin-bottom: 20px;"><h3 style="margin-top: 0; color: #c62828;">⚠️ Attention Required</h3><div style="font-size: 28px; font-weight: bold; color: #f44336; margin: 10px 0;">@{variables('highReminderCount')}</div><div style="font-size: 14px; color: #666;">Users on 2+ reminders</div></div><div style="background: white; padding: 20px; border-radius: 8px; border: 1px solid #e0e0e0;"><h3 style="margin-top: 0; color: #333;">Quick Links</h3><p><a href="$SITE_URL" style="color: #1e3c72; text-decoration: none;">📋 View SharePoint List</a></p><p><a href="$PORTAL_URL" style="color: #1e3c72; text-decoration: none;">📤 Upload Portal</a></p></div><div style="margin-top: 20px; padding: 15px; background: #e3f2fd; border-radius: 8px; border-left: 4px solid #2196f3;"><p style="margin: 0; font-size: 14px; color: #1976d2;"><strong>💡 Tip:</strong> Log in to the Upload Portal and visit the Reports tab for detailed analytics and user-level breakdowns.</p></div></div></body></html>
 '@
 
     $emailTemplate = $rawEmailTemplate.Replace('LOGO_PLACEHOLDER', $logoHeaderHtml).Replace('$SITE_URL', $siteUrl).Replace('$PORTAL_URL', $portalUrl)
@@ -332,7 +332,7 @@ try {
                             )
                         }
                     }
-                    'Initialize_Completed_Count' = @{
+                    'Initialize_MFA_Active_Count' = @{
                         runAfter = @{
                             'Initialize_Total_Count' = @("Succeeded")
                         }
@@ -340,7 +340,7 @@ try {
                         inputs = @{
                             variables = @(
                                 @{
-                                    name = "completedCount"
+                                    name = "mfaActiveCount"
                                     type = "integer"
                                     value = 0
                                 }
@@ -349,7 +349,7 @@ try {
                     }
                     'Initialize_Pending_Count' = @{
                         runAfter = @{
-                            'Initialize_Completed_Count' = @("Succeeded")
+                            'Initialize_MFA_Active_Count' = @("Succeeded")
                         }
                         type = "InitializeVariable"
                         inputs = @{
@@ -362,27 +362,38 @@ try {
                             )
                         }
                     }
-                    'Count_Statuses' = @{
+                    'Initialize_High_Reminder_Count' = @{
                         runAfter = @{
                             'Initialize_Pending_Count' = @("Succeeded")
+                        }
+                        type = "InitializeVariable"
+                        inputs = @{
+                            variables = @(
+                                @{
+                                    name = "highReminderCount"
+                                    type = "integer"
+                                    value = 0
+                                }
+                            )
+                        }
+                    }
+                    'Count_Statuses' = @{
+                        runAfter = @{
+                            'Initialize_High_Reminder_Count' = @("Succeeded")
                         }
                         type = "Foreach"
                         foreach = "@body('Parse_Items')?['value']"
                         actions = @{
-                            'Check_Status' = @{
+                            'Check_MFA_Active' = @{
                                 type = "If"
                                 expression = @{
-                                    or = @(
-                                        @{ equals = @("@items('Count_Statuses')?['fields']?['InGroup']", $true) }
-                                        @{ equals = @("@items('Count_Statuses')?['fields']?['InviteStatus']", "AddedToGroup") }
-                                        @{ equals = @("@items('Count_Statuses')?['fields']?['InviteStatus']", "Active") }
-                                    )
+                                    equals = @("@items('Count_Statuses')?['fields']?['InGroup']", $true)
                                 }
                                 actions = @{
-                                    'Increment_Completed' = @{
+                                    'Increment_MFA_Active' = @{
                                         type = "IncrementVariable"
                                         inputs = @{
-                                            name = "completedCount"
+                                            name = "mfaActiveCount"
                                             value = 1
                                         }
                                     }
@@ -399,6 +410,27 @@ try {
                                     }
                                 }
                             }
+                            'Check_High_Reminders' = @{
+                                runAfter = @{
+                                    'Check_MFA_Active' = @("Succeeded")
+                                }
+                                type = "If"
+                                expression = @{
+                                    greaterOrEquals = @(
+                                        "@coalesce(items('Count_Statuses')?['fields']?['ReminderCount'], 0)",
+                                        2
+                                    )
+                                }
+                                actions = @{
+                                    'Increment_High_Reminders' = @{
+                                        type = "IncrementVariable"
+                                        inputs = @{
+                                            name = "highReminderCount"
+                                            value = 1
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     'Calculate_Completion_Rate' = @{
@@ -406,7 +438,7 @@ try {
                             'Count_Statuses' = @("Succeeded")
                         }
                         type = "Compose"
-                        inputs = "@if(greater(variables('totalCount'), 0), div(mul(variables('completedCount'), 100), variables('totalCount')), 0)"
+                        inputs = "@if(greater(variables('totalCount'), 0), div(mul(variables('mfaActiveCount'), 100), variables('totalCount')), 0)"
                     }
                     'Build_Email_Body' = @{
                         runAfter = @{
@@ -428,12 +460,13 @@ try {
                             }
                             method = "post"
                             body = @{
+                                MailboxAddress = $noReplyMailbox
                                 To = $reportRecipients
                                 Subject = "MFA Rollout Report - @{utcNow('yyyy-MM-dd')} - @{outputs('Calculate_Completion_Rate')}% Complete"
                                 Body = "@{outputs('Build_Email_Body')}"
                                 Importance = "Normal"
                             }
-                            path = "/v2/Mail"
+                            path = "/v2/SharedMailbox/Mail"
                         }
                     }
                 }
