@@ -490,37 +490,46 @@
         
         async function signIn() {
             try {
-                // Use loginPopup with consent prompt to ensure permissions are granted
+                // Use loginPopup - this will cache the initial tokens
                 const loginResponse = await msalInstance.loginPopup({
-                    scopes: ["user.read", "Sites.Read.All"],
-                    prompt: "consent"
+                    scopes: ["user.read", "Sites.Read.All"]
                 });
                 account = loginResponse.account;
                 
-                // Proactively acquire and cache tokens for later use
-                try {
-                    await msalInstance.acquireTokenSilent({
-                        scopes: ["Sites.Read.All"],
-                        account: account
-                    });
-                } catch (silentError) {
-                    // If silent acquisition fails, try interactive
-                    console.log('Proactive token acquisition needed, requesting interactively...');
-                    await msalInstance.acquireTokenPopup({
-                        scopes: ["Sites.Read.All"],
-                        account: account
-                    });
-                }
+                // Force token acquisition to ensure tokens are cached
+                // This prevents the first upload from failing
+                console.log('Ensuring tokens are cached...');
                 
-                // Also pre-cache user.read token for uploads
-                try {
-                    await msalInstance.acquireTokenSilent({
+                // Acquire Sites.Read.All token explicitly
+                await msalInstance.acquireTokenSilent({
+                    scopes: ["Sites.Read.All"],
+                    account: account,
+                    forceRefresh: false
+                }).catch(async (silentError) => {
+                    console.log('Sites token not cached, acquiring interactively...');
+                    return await msalInstance.acquireTokenPopup({
+                        scopes: ["Sites.Read.All"],
+                        account: account
+                    });
+                });
+                
+                // Acquire user.read token explicitly (needed for uploads)
+                await msalInstance.acquireTokenSilent({
+                    scopes: ["user.read"],
+                    account: account,
+                    forceRefresh: false
+                }).catch(async (error) => {
+                    console.log('User token not cached, acquiring interactively...');
+                    return await msalInstance.acquireTokenPopup({
                         scopes: ["user.read"],
                         account: account
                     });
-                } catch (error) {
-                    console.log('User token already cached or will be acquired on demand');
-                }
+                });
+                
+                console.log('✓ All tokens cached successfully');
+                
+                // Small delay to ensure token cache is written
+                await new Promise(resolve => setTimeout(resolve, 500));
                 
                 showUploadSection();
             } catch (error) {

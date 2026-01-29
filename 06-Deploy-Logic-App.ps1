@@ -488,9 +488,40 @@ try {
         
         Write-Host "✓ Function App updated with trigger URL" -ForegroundColor Green
         Write-Host "  Note: Function App will now trigger Logic App after each upload" -ForegroundColor Gray
+        
+        # Grant Function App permission to trigger Logic App
+        Write-Host "`nGranting Function App permission to trigger Logic App..." -ForegroundColor Yellow
+        
+        # Get Function App's Managed Identity
+        $functionAppIdentity = (Get-AzWebApp -ResourceGroupName $resourceGroup -Name $functionAppName).Identity.PrincipalId
+        
+        if ($functionAppIdentity) {
+            # Assign "Logic App Contributor" role to Function App on the Logic App resource
+            $logicAppResourceId = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Logic/workflows/$logicAppName"
+            
+            try {
+                New-AzRoleAssignment -ObjectId $functionAppIdentity `
+                    -RoleDefinitionName "Logic App Contributor" `
+                    -Scope $logicAppResourceId `
+                    -ErrorAction SilentlyContinue | Out-Null
+                
+                Write-Host "✓ Function App granted Logic App Contributor role" -ForegroundColor Green
+            }
+            catch {
+                if ($_.Exception.Message -like "*already exists*") {
+                    Write-Host "✓ Function App already has Logic App Contributor role" -ForegroundColor Green
+                }
+                else {
+                    Write-Host "⚠ Could not assign role: $($_.Exception.Message)" -ForegroundColor Yellow
+                }
+            }
+        }
+        else {
+            Write-Host "⚠ Could not retrieve Function App identity" -ForegroundColor Yellow
+        }
     }
     catch {
-        Write-Host "⚠ Failed to get trigger URL: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "⚠ Failed to configure Logic App trigger: $($_.Exception.Message)" -ForegroundColor Yellow
         Write-Host "  Function App will use default 'NOT_SET_YET' value" -ForegroundColor Gray
     }
     

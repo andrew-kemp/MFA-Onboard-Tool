@@ -119,6 +119,12 @@ try {
     Write-Host "✓ Configuration loaded" -ForegroundColor Green
     Write-Host "✓ Configuration loaded" -ForegroundColor Green
     
+    # Get NoReplyMailbox (shared mailbox for sending emails)
+    $noReplyMailbox = Get-IniValueOrPrompt -Path $configFile -Section "Email" -Key "NoReplyMailbox" `
+        -Prompt "Shared Mailbox email address (for sending reports)"
+    
+    Write-Host "  From Address: $noReplyMailbox" -ForegroundColor Gray
+    
     # Ensure Azure connection
     $azContext = Get-AzContext
     if ($null -eq $azContext) {
