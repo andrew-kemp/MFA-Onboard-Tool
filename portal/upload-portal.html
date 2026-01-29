@@ -480,12 +480,14 @@
         
         async function signIn() {
             try {
+                // Use loginPopup with consent prompt to ensure permissions are granted
                 const loginResponse = await msalInstance.loginPopup({
-                    scopes: ["user.read", "Sites.Read.All"]
+                    scopes: ["user.read", "Sites.Read.All"],
+                    prompt: "consent"
                 });
                 account = loginResponse.account;
                 
-                // Proactively acquire tokens to cache them for reports
+                // Proactively acquire and cache tokens for later use
                 try {
                     await msalInstance.acquireTokenSilent({
                         scopes: ["Sites.Read.All"],
@@ -498,6 +500,16 @@
                         scopes: ["Sites.Read.All"],
                         account: account
                     });
+                }
+                
+                // Also pre-cache user.read token for uploads
+                try {
+                    await msalInstance.acquireTokenSilent({
+                        scopes: ["user.read"],
+                        account: account
+                    });
+                } catch (error) {
+                    console.log('User token already cached or will be acquired on demand');
                 }
                 
                 showUploadSection();
