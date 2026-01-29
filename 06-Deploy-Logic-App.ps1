@@ -464,35 +464,30 @@ try {
         throw "Logic App deployment failed"
     }
     
-    # Get HTTP Trigger URL
-    Write-Host "`nRetrieving Logic App HTTP trigger URL..." -ForegroundColor Yellow
+    # Get Logic App Run endpoint (allows manual triggering of any Logic App)
+    Write-Host "`nConfiguring Logic App trigger URL for manual runs..." -ForegroundColor Yellow
     Start-Sleep -Seconds 5  # Give Azure time to finalize deployment
     
     try {
-        $triggerUrl = az rest --method POST `
-            --uri "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Logic/workflows/$logicAppName/triggers/Manual_HTTP/listCallbackUrl?api-version=2016-06-01" `
-            --query "value" -o tsv 2>$null
+        # Build the manual run URL (POST to this triggers the Logic App)
+        $triggerUrl = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Logic/workflows/$logicAppName/triggers/Recurrence/run?api-version=2016-10-01"
         
-        if (-not [string]::IsNullOrWhiteSpace($triggerUrl)) {
-            Write-Host "✓ HTTP Trigger URL retrieved" -ForegroundColor Green
-            Write-Host "  URL: $($triggerUrl.Substring(0, [Math]::Min(60, $triggerUrl.Length)))..." -ForegroundColor Gray
-            
-            # Save to INI file
-            Set-IniValue -Path $configFile -Section "LogicApp" -Key "TriggerUrl" -Value $triggerUrl
-            Write-Host "✓ Trigger URL saved to INI file" -ForegroundColor Green
-            
-            # Update Function App environment variable
-            Write-Host "`nUpdating Function App with trigger URL..." -ForegroundColor Yellow
-            az functionapp config appsettings set `
-                --resource-group $resourceGroup `
-                --name $functionAppName `
-                --settings "LOGIC_APP_TRIGGER_URL=$triggerUrl" | Out-Null
-            
-            Write-Host "✓ Function App updated with trigger URL" -ForegroundColor Green
-        } else {
-            Write-Host "⚠ Could not retrieve trigger URL - will be set to NOT_SET_YET" -ForegroundColor Yellow
-            Write-Host "  You can run script 05 again after this to update it" -ForegroundColor Gray
-        }
+        Write-Host "✓ Logic App trigger URL generated" -ForegroundColor Green
+        Write-Host "  URL: $($triggerUrl.Substring(0, [Math]::Min(70, $triggerUrl.Length)))..." -ForegroundColor Gray
+        
+        # Save to INI file
+        Set-IniValue -Path $configFile -Section "LogicApp" -Key "TriggerUrl" -Value $triggerUrl
+        Write-Host "✓ Trigger URL saved to INI file" -ForegroundColor Green
+        
+        # Update Function App environment variable
+        Write-Host "`nUpdating Function App with trigger URL..." -ForegroundColor Yellow
+        az functionapp config appsettings set `
+            --resource-group $resourceGroup `
+            --name $functionAppName `
+            --settings "LOGIC_APP_TRIGGER_URL=$triggerUrl" | Out-Null
+        
+        Write-Host "✓ Function App updated with trigger URL" -ForegroundColor Green
+        Write-Host "  Note: Function App will now trigger Logic App after each upload" -ForegroundColor Gray
     }
     catch {
         Write-Host "⚠ Failed to get trigger URL: $($_.Exception.Message)" -ForegroundColor Yellow

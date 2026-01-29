@@ -180,28 +180,37 @@ try {
     
     Write-Host "Upload complete. Added: $($results.added.Count), Updated: $($results.updated.Count), Errors: $($results.errors.Count)"
     
-    # Trigger Logic App to send invitation emails
+    # Trigger Logic App to send invitation emails immediately
     $logicAppUrl = $env:LOGIC_APP_TRIGGER_URL
-    if (-not [string]::IsNullOrWhiteSpace($logicAppUrl)) {
+    if (-not [string]::IsNullOrWhiteSpace($logicAppUrl) -and $logicAppUrl -ne "NOT_SET_YET") {
         try {
             Write-Host "Triggering Logic App to send invitation emails..."
+            
+            # Get access token for Azure Management API using Managed Identity
+            $mgmtToken = (Get-AzAccessToken -ResourceUrl "https://management.azure.com").Token
+            
+            # Trigger Logic App using Management API
+            $headers = @{
+                'Authorization' = "Bearer $mgmtToken"
+                'Content-Type' = 'application/json'
+            }
+            
             $triggerBody = @{
-                batchId = $batchId
-                usersAdded = $results.added.Count
-                triggerTime = (Get-Date).ToString("o")
+                # Empty body is fine - Logic App will query SharePoint for pending users
             } | ConvertTo-Json
             
-            Invoke-RestMethod -Uri $logicAppUrl -Method Post -Body $triggerBody -ContentType "application/json" -TimeoutSec 5 | Out-Null
-            Write-Host "✓ Logic App triggered successfully"
+            Invoke-RestMethod -Uri $logicAppUrl -Method Post -Headers $headers -Body $triggerBody -TimeoutSec 10 | Out-Null
+            Write-Host "✓ Logic App triggered successfully - invitation emails will be sent shortly"
             $results.logicAppTriggered = $true
         }
         catch {
             Write-Host "Warning: Could not trigger Logic App (non-critical): $($_.Exception.Message)"
+            Write-Host "  Emails will be sent on the next scheduled run"
             $results.logicAppTriggered = $false
         }
     }
     else {
-        Write-Host "Note: LOGIC_APP_TRIGGER_URL not configured - emails will be sent on schedule"
+        Write-Host "Note: Logic App trigger not configured - emails will be sent on schedule (every $($env:RECURRENCE_HOURS) hours)"
         $results.logicAppTriggered = $false
     }
     
