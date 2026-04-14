@@ -288,11 +288,17 @@ function Update-Branding {
     $companyName = if ($Config.ContainsKey("Branding")) { $Config["Branding"]["CompanyName"] } else { "" }
     $supportTeam = if ($Config.ContainsKey("Branding")) { $Config["Branding"]["SupportTeam"] } else { "" }
     $supportEmail = if ($Config.ContainsKey("Branding")) { $Config["Branding"]["SupportEmail"] } else { "" }
+    $senderMailbox = if ($Config.ContainsKey("Email")) { $Config["Email"]["NoReplyMailbox"] } else { "" }
+    $emailSubject = if ($Config.ContainsKey("Email") -and $Config["Email"].ContainsKey("EmailSubject")) { $Config["Email"]["EmailSubject"] } else { "" }
+    $reminderSubject = if ($Config.ContainsKey("Email") -and $Config["Email"].ContainsKey("ReminderSubject")) { $Config["Email"]["ReminderSubject"] } else { "" }
 
-    Write-Host "    Logo URL:      $(if ($logoUrl) { $logoUrl } else { '(none)' })" -ForegroundColor Gray
-    Write-Host "    Company Name:  $(if ($companyName) { $companyName } else { '(none)' })" -ForegroundColor Gray
-    Write-Host "    Support Team:  $(if ($supportTeam) { $supportTeam } else { 'IT Security Team' })" -ForegroundColor Gray
-    Write-Host "    Support Email: $(if ($supportEmail) { $supportEmail } else { '(uses mailbox)' })" -ForegroundColor Gray
+    Write-Host "    Logo URL:           $(if ($logoUrl) { $logoUrl } else { '(none)' })" -ForegroundColor Gray
+    Write-Host "    Company Name:       $(if ($companyName) { $companyName } else { '(none)' })" -ForegroundColor Gray
+    Write-Host "    Support Team:       $(if ($supportTeam) { $supportTeam } else { 'IT Security Team' })" -ForegroundColor Gray
+    Write-Host "    Support Email:      $(if ($supportEmail) { $supportEmail } else { '(uses mailbox)' })" -ForegroundColor Gray
+    Write-Host "    Sender Mailbox:     $(if ($senderMailbox) { $senderMailbox } else { '(not set)' })" -ForegroundColor Gray
+    Write-Host "    Email Subject:      $(if ($emailSubject) { $emailSubject } else { '(default)' })" -ForegroundColor Gray
+    Write-Host "    Reminder Subject:   $(if ($reminderSubject) { $reminderSubject } else { '(default)' })" -ForegroundColor Gray
 
     Write-Host "`n  Enter new values (press Enter to keep current):" -ForegroundColor Yellow
 
@@ -318,6 +324,26 @@ function Update-Branding {
     if (-not [string]::IsNullOrWhiteSpace($newEmail)) {
         Set-IniValue -Path $configFile -Section "Branding" -Key "SupportEmail" -Value $newEmail
         Write-OK "Support Email updated"
+    }
+
+    $newSender = Read-Host "    Sender Mailbox [$senderMailbox]"
+    if (-not [string]::IsNullOrWhiteSpace($newSender)) {
+        Set-IniValue -Path $configFile -Section "Email" -Key "NoReplyMailbox" -Value $newSender
+        Write-OK "Sender mailbox updated"
+    }
+
+    $defaultSubject = if ($emailSubject) { $emailSubject } else { "Action Required: Set Up Multi-Factor Authentication (MFA)" }
+    $newSubject = Read-Host "    Email Subject [$defaultSubject]"
+    if (-not [string]::IsNullOrWhiteSpace($newSubject)) {
+        Set-IniValue -Path $configFile -Section "Email" -Key "EmailSubject" -Value $newSubject
+        Write-OK "Email subject updated"
+    }
+
+    $defaultReminder = if ($reminderSubject) { $reminderSubject } else { "Reminder: MFA Setup Still Pending" }
+    $newReminder = Read-Host "    Reminder Subject [$defaultReminder]"
+    if (-not [string]::IsNullOrWhiteSpace($newReminder)) {
+        Set-IniValue -Path $configFile -Section "Email" -Key "ReminderSubject" -Value $newReminder
+        Write-OK "Reminder subject updated"
     }
 
     $recurrence = $Config["LogicApp"]["RecurrenceHours"]
@@ -351,7 +377,8 @@ function Update-Permissions {
     [2] Fix Logic App API connection permissions
     [3] Add delegate to shared mailbox
     [4] Add user to Upload Portal app registration
-    [5] All of the above
+    [5] Manage Operations Group (mail-enabled security group)
+    [6] All of the above (except ops group)
     [0] Back
 " -ForegroundColor White
 
@@ -403,6 +430,128 @@ function Update-Permissions {
             }
         }
         "5" {
+            Write-Host "`n  Operations Group Management" -ForegroundColor Cyan
+            Write-Host "  ─────────────────────────────" -ForegroundColor DarkCyan
+            
+            $opsGroupEmail = if ($Config.ContainsKey("OpsGroup")) { $Config["OpsGroup"]["OpsGroupEmail"] } else { "" }
+            $opsGroupName = if ($Config.ContainsKey("OpsGroup")) { $Config["OpsGroup"]["OpsGroupName"] } else { "" }
+            
+            if (-not [string]::IsNullOrWhiteSpace($opsGroupEmail)) {
+                Write-Host "    Current group: $opsGroupName ($opsGroupEmail)" -ForegroundColor Gray
+            } else {
+                Write-Host "    No operations group configured" -ForegroundColor Gray
+            }
+            
+            Write-Host "
+    [A] Create new operations group
+    [B] Add member to existing group
+    [C] Remove member from group
+    [D] Grant group access to shared mailbox
+    [E] Grant group access to SharePoint site
+    [0] Back
+" -ForegroundColor White
+            
+            $opsChoice = Read-Host "  Select option"
+            
+            switch ($opsChoice) {
+                "A" {
+                    $newName = Read-Host "  Group display name"
+                    if ([string]::IsNullOrWhiteSpace($newName)) { return }
+                    $mailbox = $Config["Email"]["NoReplyMailbox"]
+                    $domain = ($mailbox -split '@')[1]
+                    $defaultAlias = ($newName -replace '[^a-zA-Z0-9-]', '-').ToLower()
+                    $newGroupEmail = Read-Host "  Group email [$defaultAlias@$domain]"
+                    if ([string]::IsNullOrWhiteSpace($newGroupEmail)) { $newGroupEmail = "$defaultAlias@$domain" }
+                    
+                    try {
+                        Connect-ExchangeOnline -ShowBanner:$false
+                        $existing = Get-DistributionGroup -Identity $newGroupEmail -ErrorAction SilentlyContinue
+                        if ($existing) {
+                            Write-Skip "Group already exists"
+                        } else {
+                            New-DistributionGroup -Name $newName -PrimarySmtpAddress $newGroupEmail -Type Security -MemberDepartRestriction Closed -MemberJoinRestriction Closed | Out-Null
+                            Write-OK "Created $newGroupEmail"
+                        }
+                        Disconnect-ExchangeOnline -Confirm:$false
+                        Set-IniValue -Path $configFile -Section "OpsGroup" -Key "OpsGroupName" -Value $newName
+                        Set-IniValue -Path $configFile -Section "OpsGroup" -Key "OpsGroupEmail" -Value $newGroupEmail
+                        Write-OK "Saved to config"
+                    } catch {
+                        Write-Fail "Failed: $($_.Exception.Message)"
+                        Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
+                    }
+                }
+                "B" {
+                    if ([string]::IsNullOrWhiteSpace($opsGroupEmail)) { Write-Fail "No ops group configured"; return }
+                    $member = Read-Host "  Enter member email to add"
+                    if ([string]::IsNullOrWhiteSpace($member)) { return }
+                    try {
+                        Connect-ExchangeOnline -ShowBanner:$false
+                        Add-DistributionGroupMember -Identity $opsGroupEmail -Member $member -ErrorAction Stop
+                        Write-OK "$member added to $opsGroupEmail"
+                        Disconnect-ExchangeOnline -Confirm:$false
+                    } catch {
+                        if ($_.Exception.Message -match 'already a member') {
+                            Write-Skip "$member is already a member"
+                        } else {
+                            Write-Fail "Failed: $($_.Exception.Message)"
+                        }
+                        Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
+                    }
+                }
+                "C" {
+                    if ([string]::IsNullOrWhiteSpace($opsGroupEmail)) { Write-Fail "No ops group configured"; return }
+                    $member = Read-Host "  Enter member email to remove"
+                    if ([string]::IsNullOrWhiteSpace($member)) { return }
+                    try {
+                        Connect-ExchangeOnline -ShowBanner:$false
+                        Remove-DistributionGroupMember -Identity $opsGroupEmail -Member $member -Confirm:$false -ErrorAction Stop
+                        Write-OK "$member removed from $opsGroupEmail"
+                        Disconnect-ExchangeOnline -Confirm:$false
+                    } catch {
+                        Write-Fail "Failed: $($_.Exception.Message)"
+                        Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
+                    }
+                }
+                "D" {
+                    if ([string]::IsNullOrWhiteSpace($opsGroupEmail)) { Write-Fail "No ops group configured"; return }
+                    $mailbox = $Config["Email"]["NoReplyMailbox"]
+                    Write-Step "Granting $opsGroupEmail access to $mailbox..."
+                    try {
+                        Connect-ExchangeOnline -ShowBanner:$false
+                        Add-MailboxPermission -Identity $mailbox -User $opsGroupEmail -AccessRights FullAccess -InheritanceType All -AutoMapping $false -ErrorAction Stop | Out-Null
+                        Add-RecipientPermission -Identity $mailbox -Trustee $opsGroupEmail -AccessRights SendAs -Confirm:$false -ErrorAction Stop | Out-Null
+                        Write-OK "FullAccess + SendAs granted to $opsGroupEmail on $mailbox"
+                        Disconnect-ExchangeOnline -Confirm:$false
+                    } catch {
+                        Write-Fail "Failed: $($_.Exception.Message)"
+                        Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
+                    }
+                }
+                "E" {
+                    if ([string]::IsNullOrWhiteSpace($opsGroupEmail)) { Write-Fail "No ops group configured"; return }
+                    Write-Step "Adding $opsGroupEmail to SharePoint site..."
+                    Ensure-PnPConnected -Config $Config
+                    try {
+                        $membersGroup = Get-PnPGroup -AssociatedMemberGroup -ErrorAction SilentlyContinue
+                        if ($membersGroup) {
+                            Add-PnPGroupMember -Group $membersGroup -EmailAddress $opsGroupEmail -ErrorAction Stop
+                            Write-OK "$opsGroupEmail added to site Members group"
+                        } else {
+                            Write-Fail "Could not find Members group"
+                        }
+                    } catch {
+                        if ($_.Exception.Message -match 'already exists|is already a member') {
+                            Write-Skip "$opsGroupEmail is already a site member"
+                        } else {
+                            Write-Fail "Failed: $($_.Exception.Message)"
+                        }
+                    }
+                }
+                default { return }
+            }
+        }
+        "6" {
             Write-Step "Running all permission fixes..."
             & "$PSScriptRoot\Fix-Graph-Permissions.ps1"
             & "$PSScriptRoot\Check-LogicApp-Permissions.ps1" -AddPermissions

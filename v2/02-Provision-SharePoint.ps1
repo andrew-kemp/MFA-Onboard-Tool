@@ -425,6 +425,43 @@ try {
         Write-Host "  Object ID: $groupId" -ForegroundColor Gray
     }
     
+    # ── Add Operations Group as SharePoint Site Member ──────────
+    $opsGroupEmail = $config["OpsGroup"]["OpsGroupEmail"]
+    if (-not [string]::IsNullOrWhiteSpace($opsGroupEmail)) {
+        Write-Host "`n========================================" -ForegroundColor Cyan
+        Write-Host "Operations Group - SharePoint Access" -ForegroundColor Cyan
+        Write-Host "========================================`n" -ForegroundColor Cyan
+        Write-Host "Adding $opsGroupEmail as site member..." -ForegroundColor Yellow
+        
+        try {
+            # Connect to the site to manage permissions
+            try {
+                Connect-PnPOnline -Url $siteUrl -ClientId $clientId -Tenant $tenantId -CertificatePath $pfxPath -CertificatePassword $certPassword
+            } catch {
+                Connect-PnPOnline -Url $siteUrl -ClientId $clientId -Tenant $tenantId -Thumbprint $storeCert.Thumbprint
+            }
+            
+            # Get the Members group and add the ops group email
+            $membersGroup = Get-PnPGroup -AssociatedMemberGroup -ErrorAction SilentlyContinue
+            if ($membersGroup) {
+                Add-PnPGroupMember -Group $membersGroup -EmailAddress $opsGroupEmail -ErrorAction Stop
+                Write-Host "✓ $opsGroupEmail added to site Members group" -ForegroundColor Green
+            } else {
+                Write-Warning "Could not find Members group. Add the ops group manually in SharePoint site settings."
+            }
+            
+            Disconnect-PnPOnline -ErrorAction SilentlyContinue
+        } catch {
+            if ($_.Exception.Message -match 'already exists|is already a member') {
+                Write-Host "✓ $opsGroupEmail already a site member" -ForegroundColor Green
+            } else {
+                Write-Warning "Could not add ops group to SharePoint: $($_.Exception.Message)"
+                Write-Host "  You can add it later via Update-Deployment.ps1 -Permissions" -ForegroundColor Yellow
+            }
+            Disconnect-PnPOnline -ErrorAction SilentlyContinue
+        }
+    }
+    
     Write-Host "`n✓ Step 02 completed successfully!" -ForegroundColor Green
     Write-Host "`nConfiguration Summary:" -ForegroundColor Cyan
     Write-Host "  Site URL: $siteUrl" -ForegroundColor Gray
