@@ -1,0 +1,15 @@
+# Config files (contain tenant-specific secrets)
+mfa-config.ini
+Archive/mfa-config.ini
+Archive/mfa-config.old
+
+# Certificates
+cert-output/
+Archive/cert-output/
+
+# Logs and deployment state
+logs/
+Archive/logs/
+
+# Backup files
+*.bak

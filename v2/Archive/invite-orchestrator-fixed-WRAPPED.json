@@ -1,0 +1,662 @@
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "Recurrence": {
+                "type": "Recurrence",
+                "recurrence": {
+                    "interval": 12,
+                    "frequency": "Hour"
+                }
+            }
+        },
+        "actions": {
+            "Get_items": {
+                "type": "ApiConnection",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['sharepointonline']['connectionId']"
+                        }
+                    },
+                    "method": "get",
+                    "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://kempy.sharepoint.com/sites/MFAOps'))}/tables/@{encodeURIComponent(encodeURIComponent('10b6b316-95b5-430b-91d7-15a724e1b56b'))}/items",
+                    "queries": {
+                        "$filter": "(InviteStatus eq 'Pending') or (InviteStatus eq 'Sent') or (InviteStatus eq 'Active')"
+                    }
+                },
+                "runAfter": {}
+            },
+            "For_each_user": {
+                "type": "Foreach",
+                "foreach": "@body('Get_items')?['value']",
+                "actions": {
+                    "Get_user": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['azuread']['connectionId']"
+                                }
+                            },
+                            "method": "get",
+                            "path": "/v1.0/users/@{encodeURIComponent(item()?['Title'])}"
+                        }
+                    },
+                    "Update_Display_Name": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['sharepointonline']['connectionId']"
+                                }
+                            },
+                            "method": "patch",
+                            "body": {
+                                "DisplayName": "@{body('Get_user')?['displayName']}"
+                            },
+                            "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://kempy.sharepoint.com/sites/MFAOps'))}/tables/@{encodeURIComponent(encodeURIComponent('10b6b316-95b5-430b-91d7-15a724e1b56b'))}/items/@{encodeURIComponent(item()?['ID'])}"
+                        },
+                        "runAfter": {
+                            "Get_user": [
+                                "Succeeded"
+                            ]
+                        }
+                    },
+                    "Check_MFA_Status": {
+                        "type": "Http",
+                        "inputs": {
+                            "uri": "https://graph.microsoft.com/v1.0/users/@{body('Get_user')?['id']}/authentication/methods",
+                            "method": "GET",
+                            "authentication": {
+                                "type": "ManagedServiceIdentity",
+                                "audience": "https://graph.microsoft.com"
+                            }
+                        },
+                        "runAfter": {
+                            "Get_user": [
+                                "Succeeded"
+                            ]
+                        }
+                    },
+                    "Check_Group_Membership": {
+                        "type": "Http",
+                        "inputs": {
+                            "uri": "https://graph.microsoft.com/v1.0/groups/2db39251-1b4c-4c90-a920-1e16debc9264/members/@{body('Get_user')?['id']}",
+                            "method": "GET",
+                            "authentication": {
+                                "type": "ManagedServiceIdentity",
+                                "audience": "https://graph.microsoft.com"
+                            }
+                        },
+                        "runAfter": {
+                            "Get_user": [
+                                "Succeeded"
+                            ]
+                        }
+                    },
+                    "Parse_MFA_Methods": {
+                        "type": "ParseJson",
+                        "inputs": {
+                            "content": "@body('Check_MFA_Status')",
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "value": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object"
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "runAfter": {
+                            "Check_MFA_Status": [
+                                "Succeeded"
+                            ]
+                        }
+                    },
+                    "Update_Last_Checked": {
+                        "type": "ApiConnection",
+                        "inputs": {
+                            "host": {
+                                "connection": {
+                                    "name": "@parameters('$connections')['sharepointonline']['connectionId']"
+                                }
+                            },
+                            "method": "patch",
+                            "body": {
+                                "LastChecked": "@{utcNow()}"
+                            },
+                            "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://kempy.sharepoint.com/sites/MFAOps'))}/tables/@{encodeURIComponent(encodeURIComponent('10b6b316-95b5-430b-91d7-15a724e1b56b'))}/items/@{encodeURIComponent(item()?['ID'])}"
+                        },
+                        "runAfter": {
+                            "Parse_MFA_Methods": [
+                                "Succeeded"
+                            ]
+                        }
+                    },
+                    "Check_Group_Membership_Status": {
+                        "type": "If",
+                        "expression": {
+                            "and": [
+                                {
+                                    "equals": [
+                                        "@outputs('Check_Group_Membership')['statusCode']",
+                                        200
+                                    ]
+                                }
+                            ]
+                        },
+                        "actions": {
+                            "Check_if_MFA_registered": {
+                                "type": "If",
+                                "expression": {
+                                    "or": [
+                                        {
+                                            "contains": [
+                                                "@string(body('Parse_MFA_Methods')?['value'])",
+                                                "phoneAuthenticationMethod"
+                                            ]
+                                        },
+                                        {
+                                            "contains": [
+                                                "@string(body('Parse_MFA_Methods')?['value'])",
+                                                "microsoftAuthenticatorAuthenticationMethod"
+                                            ]
+                                        },
+                                        {
+                                            "contains": [
+                                                "@string(body('Parse_MFA_Methods')?['value'])",
+                                                "softwareOathAuthenticationMethod"
+                                            ]
+                                        }
+                                    ]
+                                },
+                                "actions": {
+                                    "Update_MFA_Active": {
+                                        "type": "ApiConnection",
+                                        "inputs": {
+                                            "host": {
+                                                "connection": {
+                                                    "name": "@parameters('$connections')['sharepointonline']['connectionId']"
+                                                }
+                                            },
+                                            "method": "patch",
+                                            "body": {
+                                                "InviteStatus": {
+                                                    "Value": "Active"
+                                                },
+                                                "MFARegistrationState": {
+                                                    "Value": "Registered"
+                                                },
+                                                "InGroup": true
+                                            },
+                                            "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://kempy.sharepoint.com/sites/MFAOps'))}/tables/@{encodeURIComponent(encodeURIComponent('10b6b316-95b5-430b-91d7-15a724e1b56b'))}/items/@{encodeURIComponent(item()?['ID'])}"
+                                        }
+                                    }
+                                },
+                                "else": {
+                                    "actions": {
+                                        "Update_MFA_Not_Registered": {
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['sharepointonline']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "patch",
+                                                "body": {
+                                                    "MFARegistrationState": {
+                                                        "Value": "Not Registered"
+                                                    },
+                                                    "InGroup": true
+                                                },
+                                                "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://kempy.sharepoint.com/sites/MFAOps'))}/tables/@{encodeURIComponent(encodeURIComponent('10b6b316-95b5-430b-91d7-15a724e1b56b'))}/items/@{encodeURIComponent(item()?['ID'])}"
+                                            }
+                                        },
+                                        "Check_if_first_email": {
+                                            "type": "If",
+                                            "expression": {
+                                                "and": [
+                                                    {
+                                                        "equals": [
+                                                            "@item()?['InviteStatus']?['Value']",
+                                                            "Pending"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            "actions": {
+                                                "Send_initial_email": {
+                                                    "type": "ApiConnection",
+                                                    "inputs": {
+                                                        "host": {
+                                                            "connection": {
+                                                                "name": "@parameters('$connections')['office365-1']['connectionId']"
+                                                            }
+                                                        },
+                                                        "method": "post",
+                                                        "body": {
+                                                            "MailboxAddress": "MFA-Registration@andykemp.com",
+                                                            "To": "@{item()?['Title']}",
+                                                            "Subject": "🔒 Action Required: Set Up Multi-Factor Authentication (MFA)",
+                                                            "Body": "<html><head><style>body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;margin:0;padding:0;background-color:#f4f4f4}.container{max-width:600px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1)}.logo-header{background:#fff;padding:15px;text-align:center;border-bottom:1px solid #e0e0e0}.logo-header img{max-width:200px;height:auto}.header{background:#0078D4;padding:30px 20px;text-align:center}.header h1{color:#fff;margin:0;font-size:26px;font-weight:600}.content{padding:30px 30px 20px}.greeting{font-size:16px;color:#333;margin-bottom:15px}.message{font-size:15px;line-height:1.6;color:#555;margin-bottom:20px}.deadline-box{background:#ffe8e8;border-left:4px solid #dc3545;padding:15px 20px;margin:20px 0;border-radius:4px}.deadline-box strong{color:#dc3545}.steps{background:#f8f9fa;padding:20px;border-radius:6px;margin:20px 0}.steps h3{color:#0078D4;margin-top:0;font-size:18px}.steps ol{margin:10px 0;padding-left:20px}.steps li{margin:8px 0;color:#555}.app-links{text-align:center;margin:25px 0;padding:20px;background:#f8f9fa;border-radius:6px}.app-links h4{color:#333;margin-bottom:15px;font-size:16px}.app-links a{display:inline-block;margin:5px 8px;vertical-align:middle}.app-links img{height:45px;width:auto;display:inline-block;vertical-align:middle}.footer{background:#f8f9fa;padding:20px 30px;text-align:center;color:#888;font-size:13px}</style></head><body><div class='container'><div class='logo-header'><img src='https://www.cygnetgroup.com/wp-content/uploads/2015/11/new-news-image.jpg' alt='Cygnet Group'/></div><div class='header'><h1>Multi-Factor Authentication Setup Required</h1></div><div class='content'><div class='greeting'>Dear <strong>@{body('Get_user')?['displayName']}</strong>,</div><div class='message'>As part of our commitment to protecting your account and company data, we require all users to enable Multi-Factor Authentication (MFA). This adds an extra layer of security to your account.</div><div class='deadline-box'><strong>⏰ Important:</strong> Please complete your MFA setup within the next <strong>7 days</strong>.</div><div class='steps'><h3>📱 How to Set Up MFA (4 Easy Steps):</h3><ol><li><strong>Click the button below</strong> to start the setup process</li><li><strong>Download Microsoft Authenticator</strong> on your mobile device (links below)</li><li><strong>Follow the on-screen instructions</strong> to link your account</li><li><strong>You're done!</strong> Your account is now secure</li></ol></div><div style='text-align:center;margin:25px 0'><table cellpadding='0' cellspacing='0' border='0' bgcolor='#0078D4' style='border-radius:30px;margin:0 auto'><tr><td align='center' bgcolor='#0078D4' style='border-radius:30px;padding:16px 45px'><a href='https://func-mfa-enrol-570670.azurewebsites.net/api/track-mfa-click?user=@{encodeUriComponent(item()?['Title'])}' target='_blank' style='font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;display:inline-block'><span style='color:#ffffff;font-size:16px;font-weight:600'>🚀 Set Up MFA Now</span></a></td></tr></table></div><div class='app-links'><h4>📲 Download Microsoft Authenticator:</h4><a href='https://apps.apple.com/app/microsoft-authenticator/id983156458' target='_blank'><img src='https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg' alt='App Store'/></a><a href='https://play.google.com/store/apps/details?id=com.azure.authenticator' target='_blank'><img src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' alt='Google Play'/></a></div><div class='message'>If you have any questions or need assistance, please contact the IT Security Team.</div></div><div class='footer'>This is an automated message from IT Security Team<br>© @{utcNow('yyyy')} Your Organization. All rights reserved.</div></div></body></html>",
+                                                            "Importance": "High"
+                                                        },
+                                                        "path": "/v2/SharedMailbox/Mail"
+                                                    }
+                                                },
+                                                "Update_After_Initial_Email": {
+                                                    "type": "ApiConnection",
+                                                    "inputs": {
+                                                        "host": {
+                                                            "connection": {
+                                                                "name": "@parameters('$connections')['sharepointonline']['connectionId']"
+                                                            }
+                                                        },
+                                                        "method": "patch",
+                                                        "body": {
+                                                            "InviteStatus": {
+                                                                "Value": "Sent"
+                                                            },
+                                                            "InviteSentDate": "@{utcNow()}",
+                                                            "ReminderCount": 1
+                                                        },
+                                                        "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://kempy.sharepoint.com/sites/MFAOps'))}/tables/@{encodeURIComponent(encodeURIComponent('10b6b316-95b5-430b-91d7-15a724e1b56b'))}/items/@{encodeURIComponent(item()?['ID'])}"
+                                                    },
+                                                    "runAfter": {
+                                                        "Send_initial_email": [
+                                                            "Succeeded"
+                                                        ]
+                                                    }
+                                                }
+                                            },
+                                            "else": {
+                                                "actions": {
+                                                    "Check_if_7_days_passed": {
+                                                        "type": "If",
+                                                        "expression": {
+                                                            "or": [
+                                                                {
+                                                                    "equals": [
+                                                                        "@item()?['LastReminderDate']",
+                                                                        "@null"
+                                                                    ]
+                                                                },
+                                                                {
+                                                                    "lessOrEquals": [
+                                                                        "@addDays(item()?['LastReminderDate'], 7)",
+                                                                        "@utcNow()"
+                                                                    ]
+                                                                }
+                                                            ]
+                                                        },
+                                                        "actions": {
+                                                            "Send_reminder_email": {
+                                                                "type": "ApiConnection",
+                                                                "inputs": {
+                                                                    "host": {
+                                                                        "connection": {
+                                                                            "name": "@parameters('$connections')['office365-1']['connectionId']"
+                                                                        }
+                                                                    },
+                                                                    "method": "post",
+                                                                    "body": {
+                                                                        "MailboxAddress": "MFA-Registration@andykemp.com",
+                                                                        "To": "@{item()?['Title']}",
+                                                                        "Subject": "⚠️ Reminder #@{item()?['ReminderCount']}: MFA Setup Still Pending",
+                                                                        "Body": "<html><head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1.0'><style>a{text-decoration:none!important}</style></head><body style='font-family:Arial,Helvetica,sans-serif;margin:0;padding:0;background-color:#f4f4f4'><table width='100%' cellpadding='0' cellspacing='0' border='0' style='background-color:#f4f4f4;padding:20px 0'><tr><td align='center'><table width='600' cellpadding='0' cellspacing='0' border='0' style='background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1)'><tr><td style='background:#fff;padding:15px;text-align:center;border-bottom:1px solid #e0e0e0'><img src='https://www.cygnetgroup.com/wp-content/uploads/2015/11/new-news-image.jpg' alt='Cygnet Group' style='max-width:200px;height:auto'/></td></tr><tr><td style='background:#0078D4;padding:30px 20px;text-align:center'><h1 style='color:#ffffff;margin:0;font-size:26px;font-weight:600'>MFA Setup Reminder</h1></td></tr><tr><td style='padding:30px'><table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin:0 0 20px'><tr><td align='center'><table cellpadding='0' cellspacing='0' border='0' style='background:#0078D4;border-radius:20px'><tr><td style='padding:8px 20px'><span style='color:#ffffff;font-size:14px;font-weight:600'>Reminder #@{item()?['ReminderCount']}</span></td></tr></table></td></tr></table><p style='font-size:16px;color:#333;margin:0 0 15px'>Dear <strong>@{body('Get_user')?['displayName']}</strong>,</p><p style='font-size:15px;line-height:1.6;color:#555;margin:0 0 20px'>We noticed that you have not yet completed your Multi-Factor Authentication (MFA) setup. Securing your account is critical for protecting company data and your personal information.</p><table width='100%' cellpadding='0' cellspacing='0' border='0' style='background:#ffe8e8;border-left:4px solid #dc3545;margin:20px 0;border-radius:4px'><tr><td style='padding:15px 20px'><p style='margin:0;font-size:15px;color:#721c24'><strong>⏰ Important:</strong> Your MFA setup was due <strong>7 days ago</strong>. Please complete this setup immediately to maintain access to company resources.</p></td></tr></table><table width='100%' cellpadding='0' cellspacing='0' border='0' style='background:#f8f9fa;margin:20px 0;border-radius:6px'><tr><td style='padding:20px'><h3 style='color:#0078D4;margin:0 0 15px;font-size:18px'>📱 Quick Setup Guide:</h3><ol style='margin:10px 0;padding-left:20px;color:#555'><li style='margin:8px 0'><strong>Click the button below</strong> to begin</li><li style='margin:8px 0'><strong>Download Microsoft Authenticator</strong> (if not already installed)</li><li style='margin:8px 0'><strong>Scan the QR code</strong> with your phone</li><li style='margin:8px 0'><strong>Complete verification</strong> - Done in 2 minutes!</li></ol></td></tr></table><table width='100%' cellpadding='0' cellspacing='0' border='0' style='margin:30px 0'><tr><td align='center'><table cellpadding='0' cellspacing='0' border='0' bgcolor='#0078D4' style='border-radius:30px'><tr><td align='center' bgcolor='#0078D4' style='border-radius:30px;padding:16px 45px'><a href='https://func-mfa-enrol-327138.azurewebsites.net/api/track-mfa-click?user=@{encodeUriComponent(item()?['Title'])}' target='_blank' style='font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;display:inline-block'><span style='color:#ffffff;font-size:16px;font-weight:600'>🚀 Complete MFA Setup Now</span></a></td></tr></table></td></tr></table><table width='100%' cellpadding='0' cellspacing='0' border='0' style='background:#f8f9fa;margin:25px 0;border-radius:6px'><tr><td style='padding:20px;text-align:center'><h4 style='color:#333;margin:0 0 15px;font-size:16px'>📲 Download Microsoft Authenticator:</h4><a href='https://apps.apple.com/app/microsoft-authenticator/id983156458' target='_blank' style='display:inline-block;margin:5px 8px'><img src='https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg' alt='App Store' style='height:45px;width:auto'/></a><a href='https://play.google.com/store/apps/details?id=com.azure.authenticator' target='_blank' style='display:inline-block;margin:5px 8px'><img src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' alt='Google Play' style='height:45px;width:auto'/></a></td></tr></table><p style='font-size:15px;line-height:1.6;color:#555;margin:20px 0 0'>If you have any questions or need assistance, please contact the IT Security Team.</p></td></tr><tr><td style='background:#f8f9fa;padding:20px;text-align:center;color:#888;font-size:13px'>This is an automated message from IT Security Team<br>© @{utcNow('yyyy')} Your Organization. All rights reserved.</td></tr></table></td></tr></table></body></html>",
+                                                                        "Importance": "High"
+                                                                    },
+                                                                    "path": "/v2/SharedMailbox/Mail"
+                                                                }
+                                                            },
+                                                            "Update_Last_Reminder_Date": {
+                                                                "type": "ApiConnection",
+                                                                "inputs": {
+                                                                    "host": {
+                                                                        "connection": {
+                                                                            "name": "@parameters('$connections')['sharepointonline']['connectionId']"
+                                                                        }
+                                                                    },
+                                                                    "method": "patch",
+                                                                    "body": {
+                                                                        "LastReminderDate": "@{utcNow()}",
+                                                                        "ReminderCount": "@add(item()?['ReminderCount'], 1)"
+                                                                    },
+                                                                    "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://kempy.sharepoint.com/sites/MFAOps'))}/tables/@{encodeURIComponent(encodeURIComponent('10b6b316-95b5-430b-91d7-15a724e1b56b'))}/items/@{encodeURIComponent(item()?['ID'])}"
+                                                                },
+                                                                "runAfter": {
+                                                                    "Send_reminder_email": [
+                                                                        "Succeeded"
+                                                                    ]
+                                                                }
+                                                            }
+                                                        },
+                                                        "else": {
+                                                            "actions": {}
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "runAfter": {
+                                                "Update_MFA_Not_Registered": [
+                                                    "Succeeded"
+                                                ]
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "else": {
+                            "actions": {
+                                "For_Each_MFA_Method": {
+                                    "type": "Foreach",
+                                    "foreach": "@body('Parse_MFA_Methods')?['value']",
+                                    "actions": {
+                                        "Determine_Method_Type": {
+                                            "type": "Switch",
+                                            "expression": "@items('For_Each_MFA_Method')['@odata.type']",
+                                            "cases": {
+                                                "Phone": {
+                                                    "case": "#microsoft.graph.phoneAuthenticationMethod",
+                                                    "actions": {
+                                                        "Delete_Phone": {
+                                                            "type": "Http",
+                                                            "inputs": {
+                                                                "uri": "https://graph.microsoft.com/v1.0/users/@{body('Get_user')?['id']}/authentication/phoneMethods/@{items('For_Each_MFA_Method')['id']}",
+                                                                "method": "DELETE",
+                                                                "authentication": {
+                                                                    "type": "ManagedServiceIdentity",
+                                                                    "audience": "https://graph.microsoft.com"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                "Authenticator": {
+                                                    "case": "#microsoft.graph.microsoftAuthenticatorAuthenticationMethod",
+                                                    "actions": {
+                                                        "Delete_Authenticator": {
+                                                            "type": "Http",
+                                                            "inputs": {
+                                                                "uri": "https://graph.microsoft.com/v1.0/users/@{body('Get_user')?['id']}/authentication/microsoftAuthenticatorMethods/@{items('For_Each_MFA_Method')['id']}",
+                                                                "method": "DELETE",
+                                                                "authentication": {
+                                                                    "type": "ManagedServiceIdentity",
+                                                                    "audience": "https://graph.microsoft.com"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                "OATH": {
+                                                    "case": "#microsoft.graph.softwareOathAuthenticationMethod",
+                                                    "actions": {
+                                                        "Delete_OATH": {
+                                                            "type": "Http",
+                                                            "inputs": {
+                                                                "uri": "https://graph.microsoft.com/v1.0/users/@{body('Get_user')?['id']}/authentication/softwareOathMethods/@{items('For_Each_MFA_Method')['id']}",
+                                                                "method": "DELETE",
+                                                                "authentication": {
+                                                                    "type": "ManagedServiceIdentity",
+                                                                    "audience": "https://graph.microsoft.com"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                "FIDO2": {
+                                                    "case": "#microsoft.graph.fido2AuthenticationMethod",
+                                                    "actions": {
+                                                        "Delete_FIDO2": {
+                                                            "type": "Http",
+                                                            "inputs": {
+                                                                "uri": "https://graph.microsoft.com/v1.0/users/@{body('Get_user')?['id']}/authentication/fido2Methods/@{items('For_Each_MFA_Method')['id']}",
+                                                                "method": "DELETE",
+                                                                "authentication": {
+                                                                    "type": "ManagedServiceIdentity",
+                                                                    "audience": "https://graph.microsoft.com"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                },
+                                                "WindowsHello": {
+                                                    "case": "#microsoft.graph.windowsHelloForBusinessAuthenticationMethod",
+                                                    "actions": {
+                                                        "Delete_WindowsHello": {
+                                                            "type": "Http",
+                                                            "inputs": {
+                                                                "uri": "https://graph.microsoft.com/v1.0/users/@{body('Get_user')?['id']}/authentication/windowsHelloForBusinessMethods/@{items('For_Each_MFA_Method')['id']}",
+                                                                "method": "DELETE",
+                                                                "authentication": {
+                                                                    "type": "ManagedServiceIdentity",
+                                                                    "audience": "https://graph.microsoft.com"
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "default": {
+                                                "actions": {}
+                                            }
+                                        }
+                                    }
+                                },
+                                "Update_MFA_Not_Registered_After_Reset": {
+                                    "type": "ApiConnection",
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['sharepointonline']['connectionId']"
+                                            }
+                                        },
+                                        "method": "patch",
+                                        "body": {
+                                            "MFARegistrationState": {
+                                                "Value": "Not Registered"
+                                            },
+                                            "InGroup": false
+                                        },
+                                        "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://kempy.sharepoint.com/sites/MFAOps'))}/tables/@{encodeURIComponent(encodeURIComponent('10b6b316-95b5-430b-91d7-15a724e1b56b'))}/items/@{encodeURIComponent(item()?['ID'])}"
+                                    },
+                                    "runAfter": {
+                                        "For_Each_MFA_Method": [
+                                            "Succeeded",
+                                            "Failed",
+                                            "Skipped"
+                                        ]
+                                    }
+                                },
+                                "Check_if_first_email_after_reset": {
+                                    "type": "If",
+                                    "expression": {
+                                        "and": [
+                                            {
+                                                "equals": [
+                                                    "@item()?['InviteStatus']?['Value']",
+                                                    "Pending"
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    "actions": {
+                                        "Send_initial_email_after_reset": {
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['office365-1']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "body": {
+                                                    "MailboxAddress": "MFA-Registration@andykemp.com",
+                                                    "To": "@{item()?['Title']}",
+                                                    "Subject": "🔒 Action Required: Set Up Multi-Factor Authentication (MFA)",
+                                                    "Body": "<html><head><style>body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;margin:0;padding:0;background-color:#f4f4f4}.container{max-width:600px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1)}.logo-header{background:#fff;padding:15px;text-align:center;border-bottom:1px solid #e0e0e0}.logo-header img{max-width:200px;height:auto}.header{background:#0078D4;padding:30px 20px;text-align:center}.header h1{color:#fff;margin:0;font-size:26px;font-weight:600}.content{padding:30px 30px 20px}.greeting{font-size:16px;color:#333;margin-bottom:15px}.message{font-size:15px;line-height:1.6;color:#555;margin-bottom:20px}.deadline-box{background:#ffe8e8;border-left:4px solid #dc3545;padding:15px 20px;margin:20px 0;border-radius:4px}.deadline-box strong{color:#dc3545}.steps{background:#f8f9fa;padding:20px;border-radius:6px;margin:20px 0}.steps h3{color:#0078D4;margin-top:0;font-size:18px}.steps ol{margin:10px 0;padding-left:20px}.steps li{margin:8px 0;color:#555}.app-links{text-align:center;margin:25px 0;padding:20px;background:#f8f9fa;border-radius:6px}.app-links h4{color:#333;margin-bottom:15px;font-size:16px}.app-links a{display:inline-block;margin:5px 8px;vertical-align:middle}.app-links img{height:45px;width:auto;display:inline-block;vertical-align:middle}.footer{background:#f8f9fa;padding:20px 30px;text-align:center;color:#888;font-size:13px}</style></head><body><div class='container'><div class='logo-header'><img src='https://www.cygnetgroup.com/wp-content/uploads/2015/11/new-news-image.jpg' alt='Cygnet Group'/></div><div class='header'><h1>Multi-Factor Authentication Setup Required</h1></div><div class='content'><div class='greeting'>Dear <strong>@{body('Get_user')?['displayName']}</strong>,</div><div class='message'>As part of our commitment to protecting your account and company data, we require all users to enable Multi-Factor Authentication (MFA). This adds an extra layer of security to your account.</div><div class='deadline-box'><strong>⏰ Important:</strong> Please complete your MFA setup within the next <strong>7 days</strong>.</div><div class='steps'><h3>📱 How to Set Up MFA (4 Easy Steps):</h3><ol><li><strong>Click the button below</strong> to start the setup process</li><li><strong>Download Microsoft Authenticator</strong> on your mobile device (links below)</li><li><strong>Follow the on-screen instructions</strong> to link your account</li><li><strong>You're done!</strong> Your account is now secure</li></ol></div><div style='text-align:center;margin:25px 0'><table cellpadding='0' cellspacing='0' border='0' bgcolor='#0078D4' style='border-radius:30px;margin:0 auto'><tr><td align='center' bgcolor='#0078D4' style='border-radius:30px;padding:16px 45px'><a href='https://func-mfa-enrol-570670.azurewebsites.net/api/track-mfa-click?user=@{encodeUriComponent(item()?['Title'])}' target='_blank' style='font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;display:inline-block'><span style='color:#ffffff;font-size:16px;font-weight:600'>🚀 Set Up MFA Now</span></a></td></tr></table></div><div class='app-links'><h4>📲 Download Microsoft Authenticator:</h4><a href='https://apps.apple.com/app/microsoft-authenticator/id983156458' target='_blank'><img src='https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg' alt='App Store'/></a><a href='https://play.google.com/store/apps/details?id=com.azure.authenticator' target='_blank'><img src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' alt='Google Play'/></a></div><div class='message'>If you have any questions or need assistance, please contact the IT Security Team.</div></div><div class='footer'>This is an automated message from IT Security Team<br>© @{utcNow('yyyy')} Your Organization. All rights reserved.</div></div></body></html>",
+                                                    "Importance": "High"
+                                                },
+                                                "path": "/v2/SharedMailbox/Mail"
+                                            }
+                                        },
+                                        "Update_After_Initial_Email_Reset": {
+                                            "type": "ApiConnection",
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['sharepointonline']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "patch",
+                                                "body": {
+                                                    "InviteStatus": {
+                                                        "Value": "Sent"
+                                                    },
+                                                    "InviteSentDate": "@{utcNow()}",
+                                                    "ReminderCount": 1
+                                                },
+                                                "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://kempy.sharepoint.com/sites/MFAOps'))}/tables/@{encodeURIComponent(encodeURIComponent('10b6b316-95b5-430b-91d7-15a724e1b56b'))}/items/@{encodeURIComponent(item()?['ID'])}"
+                                            },
+                                            "runAfter": {
+                                                "Send_initial_email_after_reset": [
+                                                    "Succeeded"
+                                                ]
+                                            }
+                                        }
+                                    },
+                                    "else": {
+                                        "actions": {
+                                            "Check_if_7_days_passed_after_reset": {
+                                                "type": "If",
+                                                "expression": {
+                                                    "or": [
+                                                        {
+                                                            "equals": [
+                                                                "@item()?['LastReminderDate']",
+                                                                "@null"
+                                                            ]
+                                                        },
+                                                        {
+                                                            "lessOrEquals": [
+                                                                "@addDays(item()?['LastReminderDate'], 7)",
+                                                                "@utcNow()"
+                                                            ]
+                                                        }
+                                                    ]
+                                                },
+                                                "actions": {
+                                                    "Send_reminder_email_after_reset": {
+                                                        "type": "ApiConnection",
+                                                        "inputs": {
+                                                            "host": {
+                                                                "connection": {
+                                                                    "name": "@parameters('$connections')['office365-1']['connectionId']"
+                                                                }
+                                                            },
+                                                            "method": "post",
+                                                            "body": {
+                                                                "MailboxAddress": "MFA-Registration@andykemp.com",
+                                                                "To": "@{item()?['Title']}",
+                                                                "Subject": "⚠️ Reminder #@{item()?['ReminderCount']}: MFA Setup Still Pending",
+                                                                "Body": "<html><head><style>body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;margin:0;padding:0;background-color:#f4f4f4}.container{max-width:600px;margin:40px auto;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1)}.logo-header{background:#fff;padding:15px;text-align:center;border-bottom:1px solid #e0e0e0}.logo-header img{max-width:200px;height:auto}.header{background:#0078D4;padding:30px 20px;text-align:center}.header h1{color:#fff;margin:0;font-size:26px;font-weight:600}.content{padding:30px 30px 20px}.greeting{font-size:16px;color:#333;margin-bottom:15px}.message{font-size:15px;line-height:1.6;color:#555;margin-bottom:20px}.deadline-box{background:#ffe8e8;border-left:4px solid #dc3545;padding:15px 20px;margin:20px 0;border-radius:4px}.deadline-box strong{color:#dc3545}.steps{background:#f8f9fa;padding:20px;border-radius:6px;margin:20px 0}.steps h3{color:#0078D4;margin-top:0;font-size:18px}.steps ol{margin:10px 0;padding-left:20px}.steps li{margin:8px 0;color:#555}.app-links{text-align:center;margin:25px 0;padding:20px;background:#f8f9fa;border-radius:6px}.app-links h4{color:#333;margin-bottom:15px;font-size:16px}.app-links a{display:inline-block;margin:5px 8px;vertical-align:middle}.app-links img{height:45px;width:auto;display:inline-block;vertical-align:middle}.footer{background:#f8f9fa;padding:20px 30px;text-align:center;color:#888;font-size:13px}.reminder-badge{background:#0078D4;color:#fff;padding:5px 15px;border-radius:20px;display:inline-block;font-size:14px;font-weight:600;margin-bottom:15px}</style></head><body><div class='container'><div class='logo-header'><img src='https://www.cygnetgroup.com/wp-content/uploads/2015/11/new-news-image.jpg' alt='Cygnet Group'/></div><div class='header'><h1>MFA Setup Reminder</h1></div><div class='content'><div style='text-align:center'><span class='reminder-badge'>Reminder #@{item()?['ReminderCount']}</span></div><div class='greeting'>Dear <strong>@{body('Get_user')?['displayName']}</strong>,</div><div class='message'>We noticed that you have not yet completed your Multi-Factor Authentication (MFA) setup. Securing your account is critical for protecting company data and your personal information.</div><div class='deadline-box'><strong>⏰ Important:</strong> Your MFA setup was due <strong>7 days ago</strong>. Please complete this setup immediately to maintain access to company resources.</div><div class='steps'><h3>📱 Quick Setup Guide:</h3><ol><li><strong>Click the button below</strong> to begin</li><li><strong>Download Microsoft Authenticator</strong> (if not already installed)</li><li><strong>Scan the QR code</strong> with your phone</li><li><strong>Complete verification</strong> - Done in 2 minutes!</li></ol></div><div style='text-align:center;margin:25px 0'><table cellpadding='0' cellspacing='0' border='0' bgcolor='#0078D4' style='border-radius:30px;margin:0 auto'><tr><td align='center' bgcolor='#0078D4' style='border-radius:30px;padding:16px 45px'><a href='https://func-mfa-enrol-570670.azurewebsites.net/api/track-mfa-click?user=@{encodeUriComponent(item()?['Title'])}' target='_blank' style='font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;display:inline-block'><span style='color:#ffffff;font-size:16px;font-weight:600'>🚀 Complete MFA Setup Now</span></a></td></tr></table></div><div class='app-links'><h4>📲 Download Microsoft Authenticator:</h4><a href='https://apps.apple.com/app/microsoft-authenticator/id983156458' target='_blank'><img src='https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg' alt='App Store'/></a><a href='https://play.google.com/store/apps/details?id=com.azure.authenticator' target='_blank'><img src='https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png' alt='Google Play'/></a></div><div class='message'>If you have any questions or need assistance, please contact the IT Security Team.</div></div><div class='footer'>This is an automated message from IT Security Team<br>© @{utcNow('yyyy')} Your Organization. All rights reserved.</div></div></body></html>",
+                                                                "Importance": "High"
+                                                            },
+                                                            "path": "/v2/SharedMailbox/Mail"
+                                                        }
+                                                    },
+                                                    "Update_Last_Reminder_Date_After_Reset": {
+                                                        "type": "ApiConnection",
+                                                        "inputs": {
+                                                            "host": {
+                                                                "connection": {
+                                                                    "name": "@parameters('$connections')['sharepointonline']['connectionId']"
+                                                                }
+                                                            },
+                                                            "method": "patch",
+                                                            "body": {
+                                                                "LastReminderDate": "@{utcNow()}",
+                                                                "ReminderCount": "@add(item()?['ReminderCount'], 1)"
+                                                            },
+                                                            "path": "/datasets/@{encodeURIComponent(encodeURIComponent('https://kempy.sharepoint.com/sites/MFAOps'))}/tables/@{encodeURIComponent(encodeURIComponent('10b6b316-95b5-430b-91d7-15a724e1b56b'))}/items/@{encodeURIComponent(item()?['ID'])}"
+                                                        },
+                                                        "runAfter": {
+                                                            "Send_reminder_email_after_reset": [
+                                                                "Succeeded"
+                                                            ]
+                                                        }
+                                                    }
+                                                },
+                                                "else": {
+                                                    "actions": {}
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Update_MFA_Not_Registered_After_Reset": [
+                                            "Succeeded"
+                                        ]
+                                    }
+                                }
+                            }
+                        },
+                        "runAfter": {
+                            "Update_Last_Checked": [
+                                "Succeeded"
+                            ],
+                            "Check_Group_Membership": [
+                                "Succeeded",
+                                "Failed"
+                            ]
+                        }
+                    }
+                },
+                "runAfter": {
+                    "Get_items": [
+                        "Succeeded"
+                    ]
+                }
+            }
+        },
+        "outputs": {},
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "sharepointonline": {
+                    "id": "/subscriptions/13869b4a-7bd0-4f35-a796-3ea82f39c884/providers/Microsoft.Web/locations/uksouth/managedApis/sharepointonline",
+                    "connectionId": "/subscriptions/13869b4a-7bd0-4f35-a796-3ea82f39c884/resourceGroups/rg-MFA-Registration/providers/Microsoft.Web/connections/sharepointonline",
+                    "connectionName": "sharepointonline",
+                    "connectionProperties": {}
+                },
+                "azuread": {
+                    "id": "/subscriptions/13869b4a-7bd0-4f35-a796-3ea82f39c884/providers/Microsoft.Web/locations/uksouth/managedApis/azuread",
+                    "connectionId": "/subscriptions/13869b4a-7bd0-4f35-a796-3ea82f39c884/resourceGroups/rg-MFA-Registration/providers/Microsoft.Web/connections/azuread",
+                    "connectionName": "azuread",
+                    "connectionProperties": {}
+                },
+                "office365-1": {
+                    "id": "/subscriptions/13869b4a-7bd0-4f35-a796-3ea82f39c884/providers/Microsoft.Web/locations/uksouth/managedApis/office365",
+                    "connectionId": "/subscriptions/13869b4a-7bd0-4f35-a796-3ea82f39c884/resourceGroups/rg-MFA-Registration/providers/Microsoft.Web/connections/office365",
+                    "connectionName": "office365",
+                    "connectionProperties": {}
+                }
+            }
+        }
+    }
+}
