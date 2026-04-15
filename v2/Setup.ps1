@@ -80,6 +80,30 @@ $stateFile   = Join-Path $PSScriptRoot "logs\deployment-state.json"
 $isExisting  = $false
 $tenantLabel = ""
 
+# Check for a root-level config from an original (pre-v2) install
+$parentConfig = Join-Path (Split-Path $PSScriptRoot -Parent) "mfa-config.ini"
+if (-not (Test-Path $configFile) -and (Test-Path $parentConfig)) {
+    # Read parent config to check if it has real values
+    $parentIni = @{}; $sec = ""
+    switch -regex -file $parentConfig {
+        "^\[(.+)\]$"       { $sec = $matches[1]; $parentIni[$sec] = @{} }
+        "(.+?)\s*=\s*(.*)" { $parentIni[$sec][$matches[1]] = $matches[2] }
+    }
+    $pTenant = $parentIni["Tenant"]["TenantId"]
+    $pFunc   = $parentIni["Azure"]["FunctionAppName"]
+
+    if (-not [string]::IsNullOrWhiteSpace($pTenant) -and -not [string]::IsNullOrWhiteSpace($pFunc)) {
+        Write-Host "`n  Found existing config from original install:" -ForegroundColor Yellow
+        Write-Host "    $parentConfig" -ForegroundColor Gray
+        Write-Host "    Tenant: $pTenant  |  Function App: $pFunc" -ForegroundColor Gray
+        $migrate = Read-Host "`n  Migrate this config to v2? (Y/N)"
+        if ($migrate -match '^[Yy]') {
+            Copy-Item $parentConfig $configFile -Force
+            Write-Host "  ✓ Config copied to v2 folder" -ForegroundColor Green
+        }
+    }
+}
+
 if (Test-Path $configFile) {
     # Read INI to check if it has real values (not just a blank template)
     $iniContent = @{}
