@@ -23,9 +23,17 @@ if ($trackingToken) {
 }
 
 try {
-    # Get access token using Managed Identity (no Azure modules needed)
-    $tokenAuthURI = $env:MSI_ENDPOINT + "?resource=https://graph.microsoft.com&api-version=2017-09-01"
-    $tokenResponse = Invoke-RestMethod -Method Get -Headers @{"Secret"="$env:MSI_SECRET"} -Uri $tokenAuthURI
+    # Get access token using Managed Identity
+    # Support both new (IDENTITY_ENDPOINT) and legacy (MSI_ENDPOINT) formats
+    if ($env:IDENTITY_ENDPOINT) {
+        $tokenAuthURI = $env:IDENTITY_ENDPOINT + "?resource=https://graph.microsoft.com&api-version=2019-08-01"
+        $tokenResponse = Invoke-RestMethod -Method Get -Headers @{"X-IDENTITY-HEADER"=$env:IDENTITY_HEADER} -Uri $tokenAuthURI
+    } elseif ($env:MSI_ENDPOINT) {
+        $tokenAuthURI = $env:MSI_ENDPOINT + "?resource=https://graph.microsoft.com&api-version=2017-09-01"
+        $tokenResponse = Invoke-RestMethod -Method Get -Headers @{"Secret"=$env:MSI_SECRET} -Uri $tokenAuthURI
+    } else {
+        throw "No Managed Identity endpoint found. Ensure System Assigned Managed Identity is enabled."
+    }
     $token = $tokenResponse.access_token
     
     Write-Host "Successfully obtained access token via Managed Identity"
@@ -211,11 +219,19 @@ try {
     Write-Host "Successfully processed click tracking for $userEmail (redirect response)"
 }
 catch {
-    Write-Host "ERROR: $_"
-    Write-Host "Error Details: $($_.Exception.Message)"
+    $errorDetail = $_.Exception.Message
+    if ($_.Exception.Response) {
+        try {
+            $stream = $_.Exception.Response.GetResponseStream()
+            $reader = New-Object System.IO.StreamReader($stream)
+            $errorBody = $reader.ReadToEnd()
+            $errorDetail += " | Response: $errorBody"
+        } catch {}
+    }
+    Write-Host "ERROR: $errorDetail"
     Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
         StatusCode = [HttpStatusCode]::InternalServerError
-        Body = "Error processing request: $($_.Exception.Message)"
+        Body = "Error processing request: $errorDetail"
     })
 }
 
