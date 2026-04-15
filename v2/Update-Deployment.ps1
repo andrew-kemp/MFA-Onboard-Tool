@@ -19,7 +19,8 @@ param(
     [switch]$Branding,
     [switch]$Permissions,
     [switch]$SharePointSchema,
-    [switch]$BackfillTokens
+    [switch]$BackfillTokens,
+    [switch]$QuickFix          # Pull latest + fix all permissions (non-interactive)
 )
 
 $ErrorActionPreference = "Stop"
@@ -618,6 +619,24 @@ if (-not (Test-Path $configFile)) {
 $config = Get-IniContent -Path $configFile
 
 # Determine which updates to run
+# QuickFix = run Fix-Graph-Permissions + Check-LogicApp-Permissions automatically
+if ($QuickFix) {
+    Write-Host "`n========================================" -ForegroundColor Cyan
+    Write-Host "  Quick Fix - Applying Permission Fixes" -ForegroundColor Cyan
+    Write-Host "========================================`n" -ForegroundColor Cyan
+
+    Write-Host "Running Fix-Graph-Permissions..." -ForegroundColor Yellow
+    & "$PSScriptRoot\Fix-Graph-Permissions.ps1"
+
+    Write-Host "`nRunning Check-LogicApp-Permissions..." -ForegroundColor Yellow
+    & "$PSScriptRoot\Check-LogicApp-Permissions.ps1" -AddPermissions
+
+    Write-Host "`n========================================" -ForegroundColor Green
+    Write-Host "  ✓ Quick Fix Complete!" -ForegroundColor Green
+    Write-Host "========================================`n" -ForegroundColor Green
+    exit 0
+}
+
 $anySwitch = $UpdateAll -or $FunctionCode -or $LogicApp -or $Branding -or $Permissions -or $SharePointSchema -or $BackfillTokens
 
 if (-not $anySwitch) {

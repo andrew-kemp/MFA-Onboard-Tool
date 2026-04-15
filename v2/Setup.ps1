@@ -129,6 +129,7 @@ if ($isExisting) {
     [2] Pull latest scripts + update  - Download newest code from GitHub, then update
     [3] Fresh install (overwrite)     - Full deployment from scratch
     [4] Resume previous install$resumeInfo      - Continue where the last install left off
+    [5] Quick fix (pull + permissions) - Download latest code and fix all permissions
     [0] Exit
 " -ForegroundColor White
 
@@ -145,6 +146,12 @@ if ($isExisting) {
                 Write-Host "`n  Launching Update Tool with latest code...`n" -ForegroundColor Cyan
                 & "$PSScriptRoot\Update-Deployment.ps1"
             }
+        }
+        "5" {
+            Write-Host "`n  Pulling latest scripts..." -ForegroundColor Cyan
+            $updated = Update-ScriptsFromGitHub
+            Write-Host "`n  Running permission fixes...`n" -ForegroundColor Cyan
+            & "$PSScriptRoot\Update-Deployment.ps1" -QuickFix
         }
         "3" {
             $confirm = Read-Host "  This will overwrite the current config. Are you sure? (Y/N)"
