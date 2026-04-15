@@ -217,7 +217,7 @@ else {
         $invitationPermissions = @(
             @{Name="Directory.Read.All"; Id="7ab1d382-f21e-4acd-a863-ba3e13f7da61"}
             @{Name="User.Read.All"; Id="df021288-bdef-4463-88db-98f22de89214"}
-            @{Name="UserAuthenticationMethod.Read.All"; Id="38d9df27-64da-44fd-b7c5-a6fbac20248f"}
+            @{Name="UserAuthenticationMethod.ReadWrite.All"; Id="50483e42-d915-4231-9639-7fdb7fd190e5"}
             @{Name="GroupMember.ReadWrite.All"; Id="dbaae8cf-10b5-4b86-a4a1-f871c94c6695"}
             @{Name="Group.Read.All"; Id="5b567255-7703-4780-807c-7be8301ae99b"}
         )

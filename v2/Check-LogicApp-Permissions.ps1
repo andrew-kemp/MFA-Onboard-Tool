@@ -106,6 +106,10 @@ try {
 # Define required permissions
 $requiredPermissions = @(
     @{
+        Name = "Directory.Read.All"
+        Description = "Read directory data"
+    },
+    @{
         Name = "User.Read.All"
         Description = "Read all users' full profiles"
     },
@@ -114,8 +118,12 @@ $requiredPermissions = @(
         Description = "Read and write all users' authentication methods"
     },
     @{
-        Name = "GroupMember.Read.All"
-        Description = "Read group memberships"
+        Name = "GroupMember.ReadWrite.All"
+        Description = "Read and write group memberships"
+    },
+    @{
+        Name = "Group.Read.All"
+        Description = "Read all groups"
     }
 )
 
