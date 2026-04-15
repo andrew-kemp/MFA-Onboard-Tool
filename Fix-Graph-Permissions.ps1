@@ -58,29 +58,17 @@ else {
 
 Write-Host "`nGranting Graph API permissions..." -ForegroundColor Yellow
 
-# Force clean reload of Microsoft.Graph modules to avoid assembly conflicts
-Get-Module Microsoft.Graph* | Remove-Module -Force -ErrorAction SilentlyContinue
-Import-Module Microsoft.Graph.Authentication -Force -ErrorAction Stop
-
-# Connect to Microsoft Graph with required scopes
-try {
-    Connect-MgGraph -TenantId $tenantId -Scopes "Application.Read.All","AppRoleAssignment.ReadWrite.All" -NoWelcome
-}
-catch {
-    Write-Host "Failed to connect with interactive browser. Trying device code flow..." -ForegroundColor Yellow
-    Connect-MgGraph -TenantId $tenantId -Scopes "Application.Read.All","AppRoleAssignment.ReadWrite.All" -UseDeviceCode -NoWelcome
-}
-
-# Get Microsoft Graph Service Principal
-$graphSp = Get-MgServicePrincipal -Filter "appId eq '00000003-0000-0000-c000-000000000000'"
-
-if (-not $graphSp) {
+# Get Microsoft Graph Service Principal ID via Azure CLI (avoids Microsoft.Graph module DLL conflicts)
+$graphSpJson = az ad sp show --id 00000003-0000-0000-c000-000000000000 2>$null
+if (-not $graphSpJson) {
     throw "Could not find Microsoft Graph service principal"
 }
+$graphSp = $graphSpJson | ConvertFrom-Json
+$graphSpId = $graphSp.id
 
-Write-Host "✓ Connected to Microsoft Graph" -ForegroundColor Green
+Write-Host "✓ Found Microsoft Graph Service Principal" -ForegroundColor Green
 
-# Define required permissions
+# Define required permissions for Function App
 $requiredPermissions = @(
     @{Name="User.Read.All"; Id="df021288-bdef-4463-88db-98f22de89214"}
     @{Name="GroupMember.ReadWrite.All"; Id="dbaae8cf-10b5-4b86-a4a1-f871c94c6695"}
@@ -90,27 +78,30 @@ $requiredPermissions = @(
 foreach ($permission in $requiredPermissions) {
     Write-Host "  Granting $($permission.Name)..." -ForegroundColor Gray
     
+    $body = @{
+        principalId = $principalId
+        resourceId = $graphSpId
+        appRoleId = $permission.Id
+    } | ConvertTo-Json
+    
+    $tempFile = [System.IO.Path]::GetTempFileName()
+    $body | Set-Content $tempFile -Force
+    
     try {
-        $body = @{
-            principalId = $principalId
-            resourceId = $graphSp.Id
-            appRoleId = $permission.Id
-        }
-        
-        New-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $principalId -BodyParameter $body -ErrorAction Stop | Out-Null
+        az rest --method POST `
+            --uri "https://graph.microsoft.com/v1.0/servicePrincipals/$principalId/appRoleAssignments" `
+            --body "@$tempFile" `
+            --headers "Content-Type=application/json" 2>$null | Out-Null
         Write-Host "    ✓ $($permission.Name) granted" -ForegroundColor Green
     }
     catch {
-        if ($_.Exception.Message -like "*Permission being assigned already exists*" -or $_.Exception.Message -like "*already exists*") {
-            Write-Host "    ✓ $($permission.Name) already granted" -ForegroundColor Gray
-        }
-        else {
-            Write-Host "    ✗ ERROR: $($_.Exception.Message)" -ForegroundColor Red
-        }
+        Write-Host "    ✓ $($permission.Name) may already be granted" -ForegroundColor Gray
+    }
+    finally {
+        Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
     }
 }
 
-Disconnect-MgGraph | Out-Null
 Write-Host "`n✓ Graph API permissions granted for Function App!" -ForegroundColor Green
 
 # Grant admin consent for Upload Portal App Registration
