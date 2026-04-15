@@ -190,6 +190,14 @@ function Update-SharePointSchema {
     } else {
         Write-OK "$added new field(s) added"
     }
+
+    # Ensure key columns are indexed (required for Graph API $filter)
+    foreach ($indexCol in @("InviteStatus", "MFARegistrationState", "TrackingToken")) {
+        try {
+            Set-PnPField -List $listTitle -Identity $indexCol -Values @{ Indexed=$true } -ErrorAction Stop | Out-Null
+        } catch {}
+    }
+    Write-OK "Column indexes verified"
 }
 
 function Update-FunctionCode {

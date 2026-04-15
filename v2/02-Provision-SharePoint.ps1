@@ -391,9 +391,10 @@ try {
         Add-PnPField -List $listTitle -DisplayName "Object Id" -InternalName "ObjectId" -Type Text
         Add-PnPField -List $listTitle -DisplayName "User Type" -InternalName "UserType" -Type Text
         
-        # Index the two state columns used by Logic Apps filters
+        # Index columns used by Logic App and Function App filters
         Set-PnPField -List $listTitle -Identity "InviteStatus" -Values @{ Indexed=$true }
         Set-PnPField -List $listTitle -Identity "MFARegistrationState" -Values @{ Indexed=$true }
+        Set-PnPField -List $listTitle -Identity "TrackingToken" -Values @{ Indexed=$true }
         
         Write-Host "✓ List created with all columns and indexes" -ForegroundColor Green
     }
