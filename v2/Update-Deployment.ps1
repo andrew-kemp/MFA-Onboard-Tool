@@ -20,7 +20,8 @@ param(
     [switch]$Permissions,
     [switch]$SharePointSchema,
     [switch]$BackfillTokens,
-    [switch]$QuickFix          # Pull latest + fix all permissions (non-interactive)
+    [switch]$QuickFix,         # Pull latest + fix all permissions (non-interactive)
+    [switch]$Upgrade            # Full v2 upgrade: schema + backfill + functions + Logic App + permissions
 )
 
 $ErrorActionPreference = "Stop"
@@ -619,6 +620,34 @@ if (-not (Test-Path $configFile)) {
 $config = Get-IniContent -Path $configFile
 
 # Determine which updates to run
+# Upgrade = full v2 upgrade (schema + backfill + functions + Logic App + permissions)
+if ($Upgrade) {
+    Write-Host "`n========================================" -ForegroundColor Cyan
+    Write-Host "  Upgrading to v2" -ForegroundColor Cyan
+    Write-Host "========================================`n" -ForegroundColor Cyan
+
+    Write-Host "Step 1/5: Updating SharePoint schema..." -ForegroundColor Yellow
+    Update-SharePointSchema -Config $config
+
+    Write-Host "`nStep 2/5: Backfilling tracking tokens..." -ForegroundColor Yellow
+    Invoke-BackfillTokens -Config $config
+
+    Write-Host "`nStep 3/5: Redeploying Function App code..." -ForegroundColor Yellow
+    Update-FunctionCode -Config $config
+
+    Write-Host "`nStep 4/5: Redeploying Logic App..." -ForegroundColor Yellow
+    Update-LogicApp -Config $config
+
+    Write-Host "`nStep 5/5: Fixing permissions..." -ForegroundColor Yellow
+    & "$PSScriptRoot\Fix-Graph-Permissions.ps1"
+    & "$PSScriptRoot\Check-LogicApp-Permissions.ps1" -AddPermissions
+
+    Write-Host "`n========================================" -ForegroundColor Green
+    Write-Host "  \u2713 Upgrade to v2 Complete!" -ForegroundColor Green
+    Write-Host "========================================`n" -ForegroundColor Green
+    exit 0
+}
+
 # QuickFix = run Fix-Graph-Permissions + Check-LogicApp-Permissions automatically
 if ($QuickFix) {
     Write-Host "`n========================================" -ForegroundColor Cyan

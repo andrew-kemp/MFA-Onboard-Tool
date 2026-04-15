@@ -151,9 +151,10 @@ if ($isExisting) {
 
     [1] Update existing deployment    - Change branding, redeploy code, fix permissions
     [2] Pull latest scripts + update  - Download newest code from GitHub, then update
-    [3] Fresh install (overwrite)     - Full deployment from scratch
-    [4] Resume previous install$resumeInfo      - Continue where the last install left off
-    [5] Quick fix (pull + permissions) - Download latest code and fix all permissions
+    [3] Upgrade to v2                 - Full upgrade: schema, functions, Logic App, permissions
+    [4] Fresh install (overwrite)     - Full deployment from scratch
+    [5] Resume previous install$resumeInfo      - Continue where the last install left off
+    [6] Quick fix (pull + permissions) - Download latest code and fix all permissions
     [0] Exit
 " -ForegroundColor White
 
@@ -171,13 +172,19 @@ if ($isExisting) {
                 & "$PSScriptRoot\Update-Deployment.ps1"
             }
         }
-        "5" {
+        "3" {
+            Write-Host "`n  Pulling latest scripts..." -ForegroundColor Cyan
+            $updated = Update-ScriptsFromGitHub
+            Write-Host "`n  Upgrading to v2...`n" -ForegroundColor Cyan
+            & "$PSScriptRoot\Update-Deployment.ps1" -Upgrade
+        }
+        "6" {
             Write-Host "`n  Pulling latest scripts..." -ForegroundColor Cyan
             $updated = Update-ScriptsFromGitHub
             Write-Host "`n  Running permission fixes...`n" -ForegroundColor Cyan
             & "$PSScriptRoot\Update-Deployment.ps1" -QuickFix
         }
-        "3" {
+        "4" {
             $confirm = Read-Host "  This will overwrite the current config. Are you sure? (Y/N)"
             if ($confirm -match '^[Yy]') {
                 # Back up current config
@@ -191,7 +198,7 @@ if ($isExisting) {
                 Write-Host "`n  Cancelled.`n" -ForegroundColor Gray
             }
         }
-        "4" {
+        "5" {
             Write-Host "`n  Resuming Deployment...`n" -ForegroundColor Cyan
             & "$PSScriptRoot\Run-Complete-Deployment-Master.ps1" -Resume
         }
