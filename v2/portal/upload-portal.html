@@ -277,6 +277,117 @@
             outline: none;
             border-color: #2a5298;
         }
+
+        .drop-zone {
+            border: 3px dashed #ccc;
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #fafafa;
+            margin-bottom: 15px;
+        }
+
+        .drop-zone:hover,
+        .drop-zone.dragover {
+            border-color: #2a5298;
+            background: #e8eef7;
+        }
+
+        .drop-zone .icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .drop-zone .text {
+            color: #666;
+            font-size: 15px;
+        }
+
+        .drop-zone .text strong {
+            color: #2a5298;
+        }
+
+        .csv-preview {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+            display: none;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .csv-preview.show {
+            display: block;
+        }
+
+        .csv-preview table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        .csv-preview th {
+            background: #2a5298;
+            color: white;
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        .csv-preview td {
+            padding: 6px 12px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .csv-preview .valid { color: #4caf50; }
+        .csv-preview .invalid { color: #f44336; font-weight: 600; }
+
+        .csv-summary {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+            font-size: 13px;
+        }
+
+        .csv-summary span {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .csv-summary .valid-count { background: #e8f5e9; color: #2e7d32; }
+        .csv-summary .invalid-count { background: #ffebee; color: #c62828; }
+
+        .progress-bar-container {
+            width: 100%;
+            background: #e0e0e0;
+            border-radius: 12px;
+            overflow: hidden;
+            margin: 15px 0;
+            display: none;
+        }
+
+        .progress-bar-container.show {
+            display: block;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: linear-gradient(90deg, #4caf50, #2a5298);
+            border-radius: 12px;
+            transition: width 0.3s;
+            width: 0%;
+        }
+
+        .progress-text {
+            text-align: center;
+            font-size: 13px;
+            color: #666;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
@@ -322,8 +433,20 @@
                     <!-- CSV Upload Tab -->
                     <div id="csvTab" class="tab-content active">
                         <div class="form-group">
-                            <label for="csvFile">Select CSV File</label>
-                            <input type="file" id="csvFile" accept=".csv">
+                            <label>Upload CSV File</label>
+                            <div class="drop-zone" id="dropZone">
+                                <div class="icon">&#128193;</div>
+                                <div class="text">Drag &amp; drop your CSV file here, or <strong>click to browse</strong></div>
+                                <div id="dropFileName" style="margin-top:10px;font-weight:600;color:#2a5298;display:none"></div>
+                            </div>
+                            <input type="file" id="csvFile" accept=".csv" style="display:none">
+                        </div>
+                        <div class="csv-preview" id="csvPreview">
+                            <h4 style="margin-bottom:10px;color:#333">Preview</h4>
+                            <div class="csv-summary" id="csvSummary"></div>
+                            <div style="margin-top:10px;overflow-x:auto">
+                                <table id="csvPreviewTable"></table>
+                            </div>
                         </div>
                     </div>
                     
@@ -421,7 +544,11 @@
                 
                 <div class="loading" id="loading">
                     <div class="spinner"></div>
-                    <p>Uploading and processing users...</p>
+                    <p id="loadingText">Uploading and processing users...</p>
+                    <div class="progress-bar-container show" id="progressBarContainer">
+                        <div class="progress-bar" id="progressBar"></div>
+                    </div>
+                    <div class="progress-text" id="progressText"></div>
                 </div>
                 
                 <div class="results" id="results">
@@ -574,7 +701,89 @@
             // Create CSV with UPN header
             return 'UPN\n' + emails.join('\n');
         }
-        
+
+        // ── Drag-and-drop + CSV validation ─────────────────────
+        const dropZone = document.getElementById('dropZone');
+        const csvFileInput = document.getElementById('csvFile');
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+        dropZone.addEventListener('click', () => csvFileInput.click());
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.name.endsWith('.csv')) {
+                // Set the file on the input (for the upload handler)
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                csvFileInput.files = dt.files;
+                handleFileSelected(file);
+            } else {
+                alert('Please drop a .csv file');
+            }
+        });
+
+        csvFileInput.addEventListener('change', () => {
+            if (csvFileInput.files[0]) handleFileSelected(csvFileInput.files[0]);
+        });
+
+        function handleFileSelected(file) {
+            document.getElementById('dropFileName').textContent = file.name;
+            document.getElementById('dropFileName').style.display = 'block';
+
+            const reader = new FileReader();
+            reader.onload = (e) => validateAndPreviewCSV(e.target.result);
+            reader.readAsText(file);
+        }
+
+        function validateAndPreviewCSV(csvText) {
+            const lines = csvText.trim().split(/\r?\n/);
+            if (lines.length < 2) {
+                document.getElementById('csvPreview').classList.remove('show');
+                return;
+            }
+
+            const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+            const emailCol = headers.findIndex(h => /^(upn|userprincipalname|email)$/i.test(h));
+
+            if (emailCol === -1) {
+                document.getElementById('csvSummary').innerHTML =
+                    '<span class="invalid-count">No UPN, UserPrincipalName, or Email column found</span>';
+                document.getElementById('csvPreviewTable').innerHTML = '';
+                document.getElementById('csvPreview').classList.add('show');
+                return;
+            }
+
+            let validCount = 0, invalidCount = 0;
+            let tableHTML = '<thead><tr><th>#</th><th>Email</th><th>Status</th></tr></thead><tbody>';
+            const maxPreview = Math.min(lines.length - 1, 10);
+
+            for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+                const cols = lines[i].split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
+                const email = cols[emailCol] || '';
+                const valid = emailRegex.test(email);
+                if (valid) validCount++; else invalidCount++;
+
+                if (i <= maxPreview) {
+                    tableHTML += `<tr><td>${i}</td><td>${email}</td><td class="${valid ? 'valid' : 'invalid'}">${valid ? '&#10003;' : '&#10007; Invalid'}</td></tr>`;
+                }
+            }
+            tableHTML += '</tbody>';
+            if (lines.length - 1 > maxPreview) {
+                tableHTML += `<tfoot><tr><td colspan="3" style="text-align:center;color:#666;padding:8px">...and ${lines.length - 1 - maxPreview} more</td></tr></tfoot>`;
+            }
+
+            document.getElementById('csvSummary').innerHTML =
+                `<span class="valid-count">${validCount} valid</span>` +
+                (invalidCount > 0 ? `<span class="invalid-count">${invalidCount} invalid</span>` : '');
+            document.getElementById('csvPreviewTable').innerHTML = tableHTML;
+            document.getElementById('csvPreview').classList.add('show');
+        }
+        // ── End CSV validation ──────────────────────────────────
+
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
@@ -596,6 +805,14 @@
                     reader.onload = (event) => resolve(event.target.result);
                     reader.readAsText(file);
                 });
+
+                // Validate CSV has required column
+                const headerLine = csvContent.trim().split(/\r?\n/)[0];
+                const csvHeaders = headerLine.split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+                if (!csvHeaders.some(h => /^(upn|userprincipalname|email)$/i.test(h))) {
+                    alert('CSV must contain a UPN, UserPrincipalName, or Email column.');
+                    return;
+                }
             } else {
                 // Manual input
                 const manualInput = document.getElementById('manualInput').value.trim();
@@ -608,10 +825,13 @@
             
             const batchId = batchIdInput.value.trim();
             
-            // Show loading
+            // Show loading with progress
             document.getElementById('uploadBtn').disabled = true;
             document.getElementById('loading').classList.add('show');
             document.getElementById('results').classList.remove('show');
+            document.getElementById('progressBar').style.width = '10%';
+            document.getElementById('progressText').textContent = 'Submitting...';
+            document.getElementById('loadingText').textContent = 'Uploading and processing users...';
             
             try {
                 // Get access token for user identification (Function App allows anonymous but we send token for logging)
@@ -631,6 +851,8 @@
                 }
                 
                 // Upload to Function App
+                document.getElementById('progressBar').style.width = '30%';
+                document.getElementById('progressText').textContent = 'Sending to Function App...';
                 const response = await fetch(`${functionAppUrl}/api/upload-users`, {
                     method: 'POST',
                     headers: {
@@ -644,17 +866,24 @@
             });
             
             const result = await response.json();
+
+            document.getElementById('progressBar').style.width = '80%';
+            document.getElementById('progressText').textContent = 'Processing results...';
             
             if (!response.ok) {
                 throw new Error(result.error || 'Upload failed');
             }
             
             // Display results
+            document.getElementById('progressBar').style.width = '100%';
+            document.getElementById('progressText').textContent = 'Complete!';
             displayResults(result);
             
             // Reset form based on active tab
             if (activeTab === 'csv') {
                 document.getElementById('csvFile').value = '';
+                document.getElementById('dropFileName').style.display = 'none';
+                document.getElementById('csvPreview').classList.remove('show');
             } else {
                 document.getElementById('manualInput').value = '';
             }
@@ -665,6 +894,8 @@
         } finally {
             document.getElementById('uploadBtn').disabled = false;
             document.getElementById('loading').classList.remove('show');
+            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('progressText').textContent = '';
         }
     });
         

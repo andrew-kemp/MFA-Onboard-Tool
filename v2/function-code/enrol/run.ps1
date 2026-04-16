@@ -2,6 +2,60 @@ using namespace System.Net
 
 param($Request, $TriggerMetadata)
 
+# ── Branded HTML page helper ──────────────────────────────────────
+function Get-BrandedHtml {
+    param(
+        [string]$Title,
+        [string]$Message,
+        [string]$Icon = "&#9888;",    # ⚠ default
+        [string]$Color = "#0078D4",
+        [string]$RedirectUrl = ""      # Optional: auto-redirect after 5s
+    )
+
+    $redirectScript = ""
+    $redirectHtml = ""
+    if ($RedirectUrl) {
+        $redirectHtml = @"
+<div class="countdown">Redirecting in <strong id="timer">5</strong> seconds...</div>
+<a href="$RedirectUrl" style="display:inline-block;background:linear-gradient(135deg,#1e3c72 0%,#2a5298 100%);color:#fff;text-decoration:none;padding:12px 30px;border-radius:25px;font-size:15px;font-weight:600;margin-bottom:15px">Continue Now</a>
+"@
+        $redirectScript = @"
+<script>let s=5;const t=document.getElementById('timer');const i=setInterval(()=>{s--;t.textContent=s;if(s<=0){clearInterval(i);window.location.href='$RedirectUrl';}},1000);</script>
+"@
+    }
+
+    return @"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>$Title</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:linear-gradient(135deg,#1e3c72 0%,#2a5298 100%);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px}
+.card{background:#fff;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.2);max-width:520px;width:100%;text-align:center;overflow:hidden}
+.card-header{background:$Color;padding:30px;color:#fff}
+.card-header .icon{font-size:48px;margin-bottom:10px}
+.card-header h1{font-size:22px;font-weight:600}
+.card-body{padding:30px}
+.card-body p{color:#333;font-size:15px;line-height:1.6;margin-bottom:15px}
+.card-body .help{color:#666;font-size:13px}
+.countdown{color:#888;font-size:13px;margin-bottom:15px}
+.countdown strong{color:#2a5298}
+</style>
+</head>
+<body>
+<div class="card">
+<div class="card-header"><div class="icon">$Icon</div><h1>$Title</h1></div>
+<div class="card-body"><p>$Message</p>$redirectHtml<p class="help">If you need assistance, please contact your IT support team.</p></div>
+</div>
+$redirectScript
+</body>
+</html>
+"@
+}
+
 # Accept token parameter (preferred) or legacy user parameter
 $trackingToken = $Request.Query.token
 $userEmail = $Request.Query.user
@@ -10,7 +64,8 @@ $lookupByToken = $false
 if (-not $trackingToken -and -not $userEmail) {
     Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
         StatusCode = [HttpStatusCode]::BadRequest
-        Body = "Missing token or user parameter"
+        Headers = @{ "Content-Type" = "text/html; charset=utf-8" }
+        Body = (Get-BrandedHtml -Title "Invalid Link" -Message "This link is missing required information. Please use the link from your MFA setup email." -Icon "&#10060;" -Color "#d32f2f")
     })
     return
 }
@@ -74,9 +129,9 @@ try {
         if ($listItems.value.Count -eq 0) {
             Write-Host "Warning: Token not found in SharePoint list"
             Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
-                StatusCode = 302
-                Headers = @{ "Location" = "https://aka.ms/mfasetup" }
-                Body = "Redirecting to MFA setup..."
+                StatusCode = [HttpStatusCode]::NotFound
+                Headers = @{ "Content-Type" = "text/html; charset=utf-8" }
+                Body = (Get-BrandedHtml -Title "Link Not Recognised" -Message "We couldn't find a matching record for this link. It may have expired or already been used. Please check your email for the most recent MFA setup invitation." -Icon "&#128269;" -Color "#f57c00")
             })
             return
         }
@@ -89,14 +144,37 @@ try {
         if ($spItem.fields.ClickedLinkDate) {
             Write-Host "User $userEmail already clicked on $($spItem.fields.ClickedLinkDate) - skipping"
             Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
-                StatusCode = 302
-                Headers = @{ "Location" = "https://aka.ms/mfasetup" }
-                Body = "Redirecting to MFA setup..."
+                StatusCode = [HttpStatusCode]::OK
+                Headers = @{ "Content-Type" = "text/html; charset=utf-8" }
+                Body = (Get-BrandedHtml -Title "Already Registered" -Message "You've already clicked this link and your MFA enrolment is in progress. You'll be redirected to the MFA setup page shortly." -Icon "&#9989;" -Color "#4caf50" -RedirectUrl "https://aka.ms/mfasetup")
             })
             return
         }
 
         Write-Host "Resolved token to user: $userEmail (Item ID: $spItemId)"
+    } else {
+        # Legacy UPN mode - look up SharePoint item early for duplicate-click protection
+        $listItemsUrl = "https://graph.microsoft.com/v1.0/sites/$($siteDomain):$($sitePath):/lists/$listId/items?`$filter=fields/Title eq '$userEmail'&`$expand=fields"
+        $listItems = Invoke-RestMethod -Uri $listItemsUrl -Headers @{
+            Authorization = "Bearer $token"
+        } -Method Get
+
+        if ($listItems.value.Count -gt 0) {
+            $spItem = $listItems.value[0]
+            $spItemId = $spItem.id
+
+            if ($spItem.fields.ClickedLinkDate) {
+                Write-Host "User $userEmail already clicked on $($spItem.fields.ClickedLinkDate) - skipping (legacy mode)"
+                Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
+                    StatusCode = [HttpStatusCode]::OK
+                    Headers = @{ "Content-Type" = "text/html; charset=utf-8" }
+                    Body = (Get-BrandedHtml -Title "Already Registered" -Message "You've already clicked this link and your MFA enrolment is in progress. You'll be redirected to the MFA setup page shortly." -Icon "&#9989;" -Color "#4caf50" -RedirectUrl "https://aka.ms/mfasetup")
+                })
+                return
+            }
+        } else {
+            Write-Host "Warning: User $userEmail not found in SharePoint list (legacy mode)"
+        }
     }
 
     # Get user ID from email
@@ -138,18 +216,9 @@ try {
     try {
         Write-Host "Updating SharePoint list..."
 
-        # If we haven't looked up SharePoint yet (legacy UPN mode), do it now
+        # If we haven't found the SharePoint item yet, it means legacy mode didn't find it earlier
         if (-not $spItemId) {
-            $listItemsUrl = "https://graph.microsoft.com/v1.0/sites/$($siteDomain):$($sitePath):/lists/$listId/items?`$filter=fields/Title eq '$userEmail'&`$expand=fields"
-            $listItems = Invoke-RestMethod -Uri $listItemsUrl -Headers @{
-                Authorization = "Bearer $token"
-            } -Method Get
-
-            if ($listItems.value.Count -gt 0) {
-                $spItemId = $listItems.value[0].id
-            } else {
-                Write-Host "Warning: User not found in SharePoint list"
-            }
+            Write-Host "Warning: User not found in SharePoint list"
         }
 
         if ($spItemId) {
@@ -207,16 +276,22 @@ try {
         return
     }
     
-    # For browser/email clicks: Simple redirect to MFA setup (PowerShell Functions don't render HTML properly)
+    # For browser/email clicks: Branded confirmation page with auto-redirect to MFA setup
+    $successTitle = if ($alreadyInGroup) { "You're Already Set Up" } else { "MFA Enrolment Started" }
+    $successMessage = if ($alreadyInGroup) {
+        "Your account is already registered for MFA. You'll be redirected to the MFA setup page shortly where you can review your settings."
+    } else {
+        "Your account has been enrolled for MFA. You'll be redirected to the MFA setup page shortly to complete your registration."
+    }
+    $successIcon = if ($alreadyInGroup) { "&#9989;" } else { "&#128274;" }
+
     Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
-        StatusCode = 302
-        Headers = @{
-            "Location" = "https://aka.ms/mfasetup"
-        }
-        Body = "Redirecting to MFA setup..."
+        StatusCode = [HttpStatusCode]::OK
+        Headers = @{ "Content-Type" = "text/html; charset=utf-8" }
+        Body = (Get-BrandedHtml -Title $successTitle -Message $successMessage -Icon $successIcon -Color "#4caf50" -RedirectUrl "https://aka.ms/mfasetup")
     })
     
-    Write-Host "Successfully processed click tracking for $userEmail (redirect response)"
+    Write-Host "Successfully processed click tracking for $userEmail (branded landing page)"
 }
 catch {
     $errorDetail = $_.Exception.Message
@@ -231,7 +306,8 @@ catch {
     Write-Host "ERROR: $errorDetail"
     Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
         StatusCode = [HttpStatusCode]::InternalServerError
-        Body = "Error processing request: $errorDetail"
+        Headers = @{ "Content-Type" = "text/html; charset=utf-8" }
+        Body = (Get-BrandedHtml -Title "Something Went Wrong" -Message "We encountered an unexpected error while processing your request. Please try again in a few minutes, or contact your IT support team if the problem persists." -Icon "&#9888;" -Color "#d32f2f")
     })
 }
 
