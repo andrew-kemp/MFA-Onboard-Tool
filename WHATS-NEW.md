@@ -1,295 +1,222 @@
-# What's New - Enhanced Deployment with Comprehensive Reporting
+# What's New in v2
 
-## Summary of Enhancements
-
-We've added **comprehensive logging, error handling with retry, and detailed reporting** to the MFA Onboarding deployment scripts. Here's what you now have:
+A complete summary of every feature, improvement, and change in v2 of the MFA Onboarding Automation Tool.
 
 ---
 
-## 🎯 Key Features
+## New Entry Points
 
-### 1. **Automated Email Reports** 📧 NEW!
-- Daily or weekly email reports showing MFA rollout progress
-- Executive summary dashboard in email
-- Status breakdown, completion rates, quick links
-- **Location**: New Logic App `logic-mfa-reports-xxxxxx`
-- **Setup**: Automatically during Part 2 deployment or run `08-Deploy-Email-Reports.ps1`
-- **Recipients**: Configurable admin email addresses
-- See [EMAIL-REPORTS-README.md](EMAIL-REPORTS-README.md) for full details
+### Single Entry Point: `Setup.ps1`
+- Replaces the old `Run-Part1-Setup.ps1` / `Run-Part2-Deploy.ps1` flow with a single script
+- Auto-detects new install vs existing deployment
+- Self-updating: can pull latest scripts from GitHub while preserving your config
+- 6-option menu for existing installs (update, upgrade, fresh install, resume, quick fix)
+- Detects and migrates configuration from pre-v2 parent directories
 
-### 2. **Automatic Logic App JSON Capture**
-- Every deployment saves the actual Logic App JSON that was deployed
-- Location: `logs\LogicApp-Deployed_TIMESTAMP.json`
-- **Why useful**: See exact workflow configuration, troubleshoot, redeploy, or compare across tenants
+### Bootstrap Script: `Get-MFAOnboarder.ps1`
+- One-line download-and-run installation
+- Checks PowerShell 7+ prerequisite
+- Downloads full repository, extracts, and launches `Setup.ps1`
 
-### 3. **Technical Summary with All IDs & URLs**
-- Comprehensive technical document with EVERYTHING needed for troubleshooting
-- Location: `logs\TECHNICAL-SUMMARY_TIMESTAMP.txt`
-- **Includes**:
-  - All Azure Resource IDs (full paths)
-  - All Object IDs (apps, groups, service principals)
-  - Managed Identity Principal IDs
-  - All URLs (Azure Portal direct links)
-  - API Connection IDs and status
-  - Certificate thumbprints
-  - Troubleshooting commands
-  - Backup/DR instructions
-
-### 4. **Deployment Logs with Timestamps**
-- Every action logged with timestamp
-- Location: `logs\Part1-Setup_TIMESTAMP.log` and `logs\Part2-Deploy_TIMESTAMP.log`
-- **Includes**: All commands, errors, warnings, success messages
-
-### 5. **Error Handling with Retry**
-- If any step fails, you get prompted to retry
-- Up to 3 attempts per step
-- **You control**: Retry, skip, or abort
-- Critical steps must succeed (01, 02, 04, 05)
-
-### 6. **Comprehensive Deployment Summaries**
-- Full summary of what was deployed
-- Location: `logs\DEPLOYMENT-COMPLETE-SUMMARY_TIMESTAMP.txt`
-- **Includes**: Configuration, URLs, testing instructions, troubleshooting
+### Update Tool: `Update-Deployment.ps1`
+- Granular update operations via 8 CLI switches or interactive 7-option menu
+- Update function code, Logic App, branding, permissions, schema independently
+- Operations Group management (create, add/remove members, grant access)
+- Backfill tracking tokens for pre-v2 users
+- Full v2 upgrade path with `-Upgrade` switch
+- Quick fix mode with `-QuickFix` (pull latest + fix permissions)
 
 ---
 
-## 📁 Files Generated After Deployment
+## New Azure Function Endpoints
 
-After running `Run-Part2-Deploy-Enhanced.ps1`, you'll have these files:
+### `/api/track-open` — Email Open Tracking
+- Invisible 1×1 transparent GIF pixel embedded in every email
+- Records `EmailOpenedDate` in SharePoint on first open only
+- Fire-and-forget: tracking failures never block the pixel response
+- Always returns 200 OK with valid GIF bytes
 
-```
-logs/
-├── Part1-Setup_2026-01-23_140530.log          # Detailed log of Part 1
-├── Part1-Setup-Summary_2026-01-23_140625.txt  # Part 1 summary
-├── Part2-Deploy_2026-01-23_141500.log         # Detailed log of Part 2
-├── DEPLOYMENT-COMPLETE-SUMMARY_2026-01-23_143045.txt  # Full deployment summary
-├── TECHNICAL-SUMMARY_2026-01-23_143048.txt    # All IDs, URLs, troubleshooting info
-└── LogicApp-Deployed_2026-01-23_142830.json   # Actual Logic App JSON deployed
-```
+### `/api/resend` — Self-Service Resend
+- GET returns a branded HTML form where users enter their email
+- POST resets `InviteStatus` to Pending and clears `ReminderCount`
+- **Anti-enumeration**: returns identical success message regardless of whether the user exists
+- Logic App picks up reset users on its next run
+- Linked in the footer of every email: "Lost your setup link?"
 
----
+### Enhancements to `/api/enrol`
+- **Duplicate-click protection**: If `ClickedLinkDate` is already set, returns a branded "Already Registered" page instead of re-adding to group
+- **Branded HTML responses** with auto-redirect countdown for all outcomes:
+  - Invalid Link (red) — missing parameters
+  - Link Not Recognised (orange) — token/user not found
+  - Already Registered (green) — previously clicked
+  - MFA Enrolment Started (green) — success, redirects to aka.ms/mfasetup
+  - Error (red) — unexpected failure
+- **API detection**: Returns JSON instead of HTML for programmatic callers (based on `Accept` header / User-Agent)
+- **Token-based lookup**: Uses `TrackingToken` GUID for secure, non-guessable links (falls back to UPN for legacy users)
 
-## 💡 What Each File Is For
-
-### **Deployment Logs** (`Part1-Setup_*.log`, `Part2-Deploy_*.log`)
-**When to use**: When you need to see exactly what happened during deployment
-- Timestamps for every action
-- Error messages with stack traces
-- Success confirmations
-- User inputs
-
-**Example**:
-```
-[2026-01-23 14:30:45] [INFO] Part 2 deployment started
-[2026-01-23 14:30:52] [INFO] Executing: Azure Resources Creation (Attempt 1/3)
-[2026-01-23 14:32:15] [SUCCESS] ✓ Azure Resources Creation completed successfully
-```
-
-### **Technical Summary** (`TECHNICAL-SUMMARY_*.txt`)
-**When to use**: When troubleshooting or automating
-- All Object IDs (copy/paste into Azure Portal or scripts)
-- All Resource IDs (for Azure CLI/PowerShell)
-- Direct Azure Portal links (click to navigate)
-- API Connection status
-- Managed Identity Principal IDs
-- Troubleshooting commands
-
-**Example**:
-```
-SECURITY GROUP
-Group ID (Object ID): 12345678-1234-1234-1234-123456789012
-
-Azure Portal:
-  https://portal.azure.com/#view/Microsoft_AAD_IAM/GroupDetailsMenuBlade/~/Overview/groupId/12345678-1234-1234-1234-123456789012
-
-Microsoft Graph API:
-  GET https://graph.microsoft.com/v1.0/groups/12345678-1234-1234-1234-123456789012
-```
-
-### **Logic App JSON** (`LogicApp-Deployed_*.json`)
-**When to use**: When you need to see or modify the Logic App workflow
-- Exact JSON that was deployed
-- All trigger configurations
-- All action settings
-- Can be modified and redeployed
-
-**Use cases**:
-- Compare deployments across different tenants
-- Document workflow for compliance
-- Redeploy if Logic App is accidentally deleted
-- Troubleshoot workflow issues
-
-### **Deployment Summary** (`DEPLOYMENT-COMPLETE-SUMMARY_*.txt`)
-**When to use**: When you need to know what was deployed and how to test it
-- Configuration overview
-- All URLs for resources
-- Step-by-step testing instructions
-- Next steps
-- Troubleshooting tips
+### Enhancements to `/api/upload-users`
+- **Immediate Logic App trigger**: After uploading users, attempts to trigger the Logic App immediately via HTTP; falls back to scheduled processing
+- **Tracking token generation**: Each new user gets a unique GUID `TrackingToken`
 
 ---
 
-## 🚀 Usage
+## Upload Portal Improvements
 
-### Run Enhanced Deployment
+### Drag-and-Drop CSV Upload
+- Visual drag-and-drop zone (click or drag a `.csv` file)
+- **Client-side validation**: Parses headers, identifies email column (`UPN`, `UserPrincipalName`, or `Email`), validates email format with regex
+- **Preview table**: Shows first 10 rows with valid/invalid indicators
+- **Summary**: Total valid and invalid counts before upload
+- **Progress bar**: Animated upload progress
+- **Results**: Stat cards (Total, Added, Updated, Skipped, Errors) with expandable error/skip details
+
+### Reports Tab
+- **Executive summary dashboard**: Total Users, MFA Active, Pending, Completion Rate (%)
+- **Batch filter dropdown**: Dynamically populated from `SourceBatchId` values with per-batch user counts; filters all report sections
+- **Status breakdown**: Grid cards for each status (Pending, Sent, Clicked, AddedToGroup, Active, Error, Skipped) with counts and percentages
+- **Recent activity**: Last 7 days — invites sent, links clicked, added to group
+- **High reminder alerts**: Red warning box highlighting users with 2+ reminders
+- **Users needing attention**: List of users requiring follow-up
+- **Batch performance**: Per-batch completion rates and user counts
+- **CSV export**: Download all report data as `mfa-report-YYYY-MM-DD.csv` with proper escaping
+- **Email report**: Compose and send an executive summary email directly from the portal
+
+### Branded Success Landing Page
+- After successful CSV upload, users see a styled success page
+- Auto-redirects to the reports tab after countdown
+
+---
+
+## Logic App Enhancements
+
+### Retry Policies on All Actions
+- **Exponential backoff** on all 16 API-connected actions
+- 3 retries with 10-second minimum interval and 1-hour maximum
+- Covers: SharePoint reads/writes, Office 365 email sends, user lookups, group membership checks, Graph API calls
+- Eliminates transient failures causing stuck users
+
+### Manager Escalation
+- After 2+ reminder emails without MFA completion, the user's **manager is automatically escalated**
+- Manager is looked up via Microsoft Graph (`/users/{id}/manager`)
+- Escalation email has a **red "Manager Action Required" header**, includes employee name, reminder count, and clear action instructions
+- Records `EscalatedToManager=true` and `EscalationDate` in SharePoint
+- Only escalates once per user (checks `EscalatedToManager` before sending)
+
+### Email Open Tracking Pixel
+- Every outgoing email includes an invisible `<img>` tag pointing to `/api/track-open?token={TrackingToken}`
+- Stamps `EmailOpenedDate` in SharePoint on first open
+- Works alongside click tracking to give full engagement visibility
+
+### Self-Service Resend Link
+- Every email footer includes a "Lost your setup link?" link pointing to `/api/resend`
+- Users can request a re-send without contacting IT
+
+### Configurable Email Subjects
+- Separate `EmailSubject` and `ReminderSubject` fields in `mfa-config.ini`
+- Replaced at deployment via template placeholders `PLACEHOLDER_SUBJECT` and `PLACEHOLDER_REMINDER_SUBJECT`
+
+---
+
+## Application Insights Integration
+
+- **Full telemetry** for all Function App endpoints: request logging, exception tracking, performance metrics
+- **Live Metrics Stream** for real-time monitoring during rollouts
+- Auto-provisioned by Script 04 (`04-Create-Azure-Resources.ps1`)
+- Instrumentation key and connection string saved to `mfa-config.ini`
+- Set as environment variables on the Function App (`APPINSIGHTS_INSTRUMENTATIONKEY`, `APPLICATIONINSIGHTS_CONNECTION_STRING`)
+- Configurable in `host.json`: sampling rates, log levels, HTTP throttling
+- Request telemetry excluded from sampling for complete audit trail
+
+---
+
+## Infrastructure as Code (Bicep)
+
+- New `infra/main.bicep` template defining all Azure resources:
+  - Storage Account (Standard_LRS, HTTPS-only, TLS 1.2)
+  - Application Insights (Web type, 90-day retention)
+  - App Service Plan (Consumption Y1/Dynamic)
+  - Function App (PowerShell 7.4, Managed Identity, HTTPS-only, FTPS disabled, TLS 1.2)
+  - Office 365 API Connection
+  - SharePoint API Connection
+- `infra/main.parameters.json` for environment-specific values
+- Outputs: `functionAppPrincipalId`, `functionAppHostname`, `appInsightsKey`, `appInsightsConnectionString`, connection IDs
+
+---
+
+## New SharePoint Columns
+
+v2 adds these columns to the tracking list (auto-added by `Update-Deployment.ps1 -SharePointSchema`):
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `TrackingToken` | Text (indexed) | Unique GUID for secure enrolment links |
+| `EmailOpenedDate` | DateTime | First email open timestamp (tracking pixel) |
+| `EscalatedToManager` | Boolean | Whether manager has been escalated |
+| `EscalationDate` | DateTime | When the escalation email was sent |
+| `ManagerUPN` | Text | Manager's email from Entra ID |
+| `MFARegistrationDate` | DateTime | When MFA auth methods were first detected |
+| `SourceBatchId` | Text | Batch identifier from upload |
+
+---
+
+## Operations Group Support
+
+- Create a **mail-enabled security group** for your operations team
+- Automatically grant the group:
+  - **FullAccess + SendAs** on the shared mailbox
+  - **Member access** on the SharePoint site
+- Add/remove members by email
+- Managed via `Update-Deployment.ps1 -Permissions` → Manage Operations Group
+- Configuration stored in `[OpsGroup]` section of `mfa-config.ini`
+
+---
+
+## Deployment & Scripting Improvements
+
+### Common-Functions.ps1
+- `Initialize-Logging` — Creates timestamped log files
+- `Write-Log` — Consistent logging with timestamps and severity levels
+- `Invoke-WithRetry` — Generic retry wrapper with configurable attempts
+- `Get-IniContent` — Parses `mfa-config.ini` into a nested hashtable
+- `New-DeploymentSummary` — Generates post-deployment summary with testing instructions
+
+### Deployment Reports
+- Automatic deployment summary generation after completing all scripts
+- Technical summary with all IDs, URLs, and troubleshooting commands
+- Logic App JSON capture for audit and redeployment
+
+### Resume Capability
+- Deployment state saved to `logs/deployment-state.json` after each step
+- Resume from last completed step with `.\Run-Complete-Deployment-Master.ps1 -Resume`
+- Start from a specific step with `-StartFromStep 5`
+
+### Idempotent Scripts
+- All deployment scripts check for existing resources before creating
+- Safe to re-run any script without duplicating resources
+- Handles "already exists" errors gracefully
+
+---
+
+## Upgrade Path from v1
+
+Existing v1 installations can upgrade to v2:
+
 ```powershell
-# Part 1: Setup
-.\Run-Part1-Setup-Enhanced.ps1
-
-# Part 2: Deploy (with automatic reporting)
-.\Run-Part2-Deploy-Enhanced.ps1
+.\Setup.ps1
+# Select [3] Upgrade to v2
 ```
 
-After Part 2 completes, you'll see:
-```
-Summary Reports Generated:
-  1. Deployment Summary : logs\DEPLOYMENT-COMPLETE-SUMMARY_2026-01-23_143045.txt
-  2. Technical Summary  : logs\TECHNICAL-SUMMARY_2026-01-23_143048.txt
-  3. Deployment Log     : logs\Part2-Deploy_2026-01-23_141500.log
-  4. Logic App JSON     : logs\LogicApp-Deployed_2026-01-23_142830.json
-```
+Or directly:
 
-### Generate Technical Summary Anytime
 ```powershell
-# Run standalone to regenerate technical summary
-.\Create-TechnicalSummary.ps1
+.\Update-Deployment.ps1 -Upgrade
 ```
 
----
+The upgrade process:
+1. Updates SharePoint schema (adds new columns)
+2. Backfills tracking tokens for existing users
+3. Redeploys function code (4 endpoints)
+4. Redeploys Logic App (with retry policies, escalation, tracking pixel, resend link)
+5. Fixes all Graph API permissions
 
-## 🔍 What Information Is Captured
-
-### **Object IDs**
-- SharePoint App Registration Object ID
-- Upload Portal App Registration Object ID
-- Security Group Object ID
-- Function App Managed Identity Principal ID
-- Logic App Managed Identity Principal ID
-
-### **Resource IDs**
-- Function App: `/subscriptions/.../resourceGroups/.../providers/Microsoft.Web/sites/...`
-- Storage Account: `/subscriptions/.../resourceGroups/.../providers/Microsoft.Storage/storageAccounts/...`
-- Logic App: `/subscriptions/.../resourceGroups/.../providers/Microsoft.Logic/workflows/...`
-- API Connections: `/subscriptions/.../resourceGroups/.../providers/Microsoft.Web/connections/...`
-
-### **URLs**
-- SharePoint Site URL
-- SharePoint List URL
-- Function App Endpoints (track-mfa-click, upload-users)
-- Upload Portal URL
-- Azure Portal direct links to all resources
-- Microsoft Graph API URLs
-- SharePoint REST API URLs
-
-### **Configuration**
-- Tenant ID
-- Subscription ID
-- Resource Group
-- All app settings
-- Certificate thumbprints
-- Email configuration
-- Security group details
-
----
-
-## 🛠️ Troubleshooting Use Cases
-
-### Scenario 1: "Upload Portal Returns 404"
-**What to check**:
-1. Open **Technical Summary**
-2. Find Function App URL section
-3. Copy the upload-users endpoint URL
-4. Test it directly: `Invoke-WebRequest -Uri "URL"`
-5. Check Application Insights link in Technical Summary
-
-### Scenario 2: "Logic App Not Sending Emails"
-**What to check**:
-1. Open **Logic App JSON** in logs folder
-2. Verify email configuration in the JSON
-3. Open **Technical Summary**
-4. Find API Connections section
-5. Click the portal links to check authorization status
-6. Find the Logic App run history URL and check errors
-
-### Scenario 3: "User Not Added to Group"
-**What to check**:
-1. Open **Technical Summary**
-2. Find Function App Managed Identity Principal ID
-3. Find Security Group ID
-4. Use the troubleshooting commands provided:
-   ```powershell
-   az ad group member list --group "GROUP-ID"
-   ```
-5. Check Function App logs via portal link in Technical Summary
-
-### Scenario 4: "Deploy to Another Tenant"
-**What to do**:
-1. Copy all scripts to new folder (e.g., `C:\TenantB`)
-2. Run deployment in new folder
-3. **Compare the two Technical Summaries** to verify differences
-4. Use **Logic App JSON** from tenant A to deploy same workflow to tenant B
-
----
-
-## 📊 Benefits
-
-### 1. **Complete Audit Trail**
-- Know exactly what was deployed, when, and by whom
-- Logs include timestamps, errors, and user decisions
-- Perfect for compliance and documentation
-
-### 2. **Faster Troubleshooting**
-- All IDs and URLs in one place
-- Direct links to Azure Portal
-- Troubleshooting commands provided
-- No need to search for resource IDs
-
-### 3. **Multi-Tenant Deployments**
-- Deploy to multiple tenants easily
-- Compare deployments via Technical Summaries
-- Use Logic App JSON as template for other tenants
-- Isolated logs per deployment
-
-### 4. **Disaster Recovery**
-- Logic App JSON can be redeployed if deleted
-- All configuration backed up in INI file
-- Technical Summary documents all resource IDs
-- Certificates backed up in cert-output folder
-
-### 5. **Automation**
-- All Resource IDs documented for scripting
-- Azure CLI commands provided
-- PowerShell commands provided
-- Microsoft Graph API URLs ready to use
-
----
-
-## 🎉 Summary
-
-You now have:
-- ✅ **Complete logging** of all deployment actions
-- ✅ **Error handling with retry** for failed steps
-- ✅ **Logic App JSON** automatically captured
-- ✅ **Technical Summary** with ALL IDs, URLs, and troubleshooting info
-- ✅ **Deployment Summary** with testing instructions
-- ✅ **Everything saved as text files** for easy reference
-
-**All documentation is automatic** - just run the enhanced scripts and everything is generated for you!
-
----
-
-## 📝 Next Steps
-
-1. Run deployment: `.\Run-Part2-Deploy-Enhanced.ps1`
-2. Review the 4 generated files in `logs\` folder
-3. Bookmark the Technical Summary for troubleshooting
-4. Archive the Logic App JSON for backup
-5. Keep deployment logs for audit trail
-
----
-
-**Need to generate reports anytime?**
-```powershell
-# Regenerate technical summary anytime
-.\Create-TechnicalSummary.ps1
-```
+Your `mfa-config.ini` and existing SharePoint data are preserved throughout the upgrade.

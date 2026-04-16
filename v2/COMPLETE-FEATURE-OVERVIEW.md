@@ -1,459 +1,280 @@
-# MFA Onboarding System - Complete Feature Overview
+# Complete Feature Overview
 
-## 🎯 System Overview
-Automated MFA enrollment system for organization-wide rollouts with comprehensive reporting, real-time tracking, and administrator notifications.
-
----
-
-## 📋 Core Components
-
-### 1. Deployment Automation
-- **One-shot full deployment**: `Run-Complete-Deployment-Master.ps1` executes Steps 01-08, post-deployment fixes, permissions, and final report generation in a single run.
-- **Enhanced Part 1**: M365 & SharePoint setup with logging and retry
-- **Enhanced Part 2**: Azure resources deployment with automatic technical documentation
-- **Common Functions**: Shared utilities for logging, retry, and reporting
-- **Configuration**: Central INI file for all settings (no hardcoded values)
-
-### 2. Azure Resources
-- **Function App**: PowerShell 7.4 runtime with managed identity
-  - `enrol` function: Handles MFA link clicks, adds to group, updates SharePoint
-  - `upload-users` function: Batch user invitation processing
-- **Logic App (Invitations)**: Sends personalized MFA enrollment emails
-- **Logic App (Reports)**: Sends daily/weekly status reports to admins
-- **Storage Account**: Static website hosting for upload portal
-
-### 3. SharePoint Integration
-- **Tracking List**: Central database for all user enrollment data
-  - Columns: Title (UPN), InviteStatus, InGroup, ClickedLinkDate, AddedToGroupDate, InviteSentDate, SourceBatchId
-- **PnP PowerShell**: Certificate-based authentication for automated updates
-- **Graph API**: Real-time list updates from Function App
-
-### 4. Upload Portal (Web Interface)
-Three tabs for complete management:
-
-#### Tab 1: CSV Upload
-- Drag-and-drop CSV file upload
-- Batch processing with validation
-- Automatic invitation email sending
-- Progress tracking per batch
-
-#### Tab 2: Manual Entry
-- Single user invitation form
-- Real-time validation
-- Immediate processing
-- Manual fallback when CSV not available
-
-#### Tab 3: Reports Dashboard 📊 NEW!
-- **Executive Summary**: Total users, completed, pending, completion rate
-- **Status Breakdown**: Visual breakdown by InviteStatus
-- **Recent Activity**: Last 7 days of enrollment activity
-- **Users Needing Attention**: Pending 3+ days, clicked but not in group
-- **Batch Performance**: Completion rates by SourceBatchId
-- **Live Data**: Real-time refresh from SharePoint via Graph API
+Detailed breakdown of every feature in the MFA Onboarding Automation Tool v2.
 
 ---
 
-## 📧 Email Reports Feature (NEW!)
+## 1. User Upload & Management
 
-### What It Does
-Automated email reports sent to administrators showing MFA rollout progress.
+### CSV Bulk Upload
+- Upload CSV files via the web portal's drag-and-drop interface
+- Supports columns named `UPN`, `UserPrincipalName`, or `Email` (case-insensitive)
+- Client-side validation: email format checking with preview table (first 10 rows)
+- Server-side validation: regex email validation, duplicate detection against existing SharePoint items
+- Optional Batch ID: custom or auto-generated as `yyyy-MM-dd-HHmm`
+- **New users**: Created with `InviteStatus=Pending`, unique `TrackingToken` GUID
+- **Existing users**: Reset to `InviteStatus=Pending`, `MFARegistrationState=Unknown`, re-processed
+- Progress bar and results summary with stat cards (Total, Added, Updated, Skipped, Errors)
 
-### Report Contents
-- **Total Users**: Complete count in rollout
-- **Completed**: Users successfully added to MFA group
-- **Pending**: Users not yet completed
-- **Completion Rate**: Percentage completed
-- **Quick Links**: SharePoint list and Upload Portal
+### Manual Entry
+- Textarea input for one-per-line or comma-separated email addresses
+- Converted to CSV format with `UPN` header before submission
+- Same server-side processing as CSV upload
 
-### Frequency Options
-- **Daily**: Every day at 9:00 AM
-- **Weekly**: Every Monday at 9:00 AM
-- **Both**: Daily and weekly reports
+### Immediate Logic App Trigger
+- After upload, the function attempts to trigger the Logic App immediately via HTTP
+- If the Logic App trigger URL is unavailable, falls back to the next scheduled run
+- No user impact if trigger fails — graceful degradation
 
-### How to Set Up
-1. During Part 2 deployment, choose "Y" when prompted
-2. Enter recipient email addresses (comma-separated)
-3. Select frequency (daily/weekly/both)
-4. After deployment, authorize Office 365 connection in Azure Portal
+---
 
-### Manual Setup
-```powershell
-.\08-Deploy-Email-Reports.ps1
+## 2. Automated Email Workflow
+
+### Initial Invitation
+- Professional HTML email with:
+  - Company logo and branding (configurable)
+  - 4-step MFA setup guide
+  - Large "Set Up MFA Now" call-to-action button linking to `/api/enrol?token={TrackingToken}`
+  - Microsoft Authenticator app download links (iOS and Android App Store)
+  - Invisible tracking pixel (`/api/track-open?token={TrackingToken}`)
+  - "Lost your setup link?" footer link to `/api/resend`
+- Sent from the configured shared mailbox
+- Configurable subject line via `[Email].EmailSubject`
+
+### Automated Reminders
+- Sent 7+ days after previous email if MFA is not yet registered
+- Includes "Reminder #{count}" badge with stronger urgency messaging
+- Same tracking pixel and resend link as initial invitation
+- Configurable subject line via `[Email].ReminderSubject`
+- `ReminderCount` incremented in SharePoint after each reminder
+
+### Manager Escalation
+- Triggered after 2+ reminders without MFA completion
+- Looks up user's manager via Microsoft Graph API (`/users/{id}/manager`)
+- Escalation email features:
+  - Red "Manager Action Required" header
+  - Employee name and department
+  - Number of reminders sent
+  - Clear action instructions
+- Records `EscalatedToManager=true` and `EscalationDate` in SharePoint
+- Only escalates once per user (checks before sending)
+
+### Email Open Tracking
+- Invisible 1×1 transparent GIF pixel in every email
+- `/api/track-open` endpoint records `EmailOpenedDate` on first open only
+- Fire-and-forget: tracking failures never block the pixel response
+- Always returns valid GIF with `Cache-Control: no-store` (43 bytes)
+
+### Self-Service Resend
+- Footer link in every email: "Lost your setup link?"
+- `/api/resend` endpoint:
+  - GET: Returns branded HTML form
+  - POST: Resets user to `InviteStatus=Pending`, clears `ReminderCount` and `LastReminderDate`
+- **Anti-enumeration**: Always returns the same generic success message regardless of whether the email exists in the system
+- Logic App picks up reset users on next scheduled run
+
+---
+
+## 3. Enrolment Click Tracking
+
+### `/api/enrol` Endpoint
+- Handles the link users click in their invitation email
+- **Token-based lookup** (preferred): Uses `TrackingToken` GUID for secure, non-guessable links
+- **Legacy fallback**: Falls back to raw UPN for pre-v2 users
+
+### Duplicate-Click Protection
+- If `ClickedLinkDate` is already set, returns branded "Already Registered" page
+- Does NOT re-add user to the security group
+- 5-second auto-redirect to https://aka.ms/mfasetup
+
+### Security Group Management
+- Looks up user in Entra ID via Graph API
+- Adds user to MFA security group (handles "already a member" gracefully)
+- Updates SharePoint: `ClickedLinkDate`, `InGroup=true`, `AddedToGroupDate`, `InviteStatus=Sent`
+
+### Branded HTML Responses
+All responses are professionally styled HTML pages with auto-redirect countdown:
+
+| Scenario | Colour | Message | Redirect |
+|----------|--------|---------|----------|
+| Missing parameters | Red | "Invalid Link" | Portal URL |
+| Token/user not found | Orange | "Link Not Recognised" | Portal URL |
+| Already clicked | Green | "Already Registered" | aka.ms/mfasetup |
+| Success | Green | "MFA Enrolment Started" | aka.ms/mfasetup |
+| Internal error | Red | "Something Went Wrong" | Portal URL |
+
+### API Mode
+- Detects programmatic callers (no User-Agent or `Accept: application/json`)
+- Returns JSON instead of HTML for integrations and testing
+
+---
+
+## 4. MFA Verification
+
+### Graph API Integration
+- Logic App queries `/v1.0/users/{id}/authentication/methods` via Managed Identity
+- Checks for: Phone, Microsoft Authenticator, OATH software/hardware tokens, FIDO2 security keys, Windows Hello for Business
+- If any method detected: Sets `InviteStatus=Active`, `MFARegistrationState=Registered`, records `MFARegistrationDate`
+
+### Status Lifecycle
 ```
+Pending → Sent → Clicked → AddedToGroup → Active
+                                         ↗
+                            (MFA verified via Graph)
+```
+
+- **Pending**: User uploaded, awaiting first email
+- **Sent**: Initial invitation email sent
+- **Clicked**: User clicked enrolment link
+- **AddedToGroup**: User added to MFA security group
+- **Active**: MFA authentication methods detected and verified
+- **Skipped Registered**: Users already registered when uploaded
+- **Error**: Processing error (details in Notes column)
+
+---
+
+## 5. Upload Portal (Web SPA)
+
+### Authentication
+- MSAL.js 2.30.0 with Entra ID popup login
+- Scopes: `user.read`, `Sites.Read.All`
+- Pre-caches tokens on login to prevent first-upload authentication failures
+- Tenant and Client ID injected at deployment time from `mfa-config.ini`
+
+### Tab 1: CSV Upload
+- Drag-and-drop zone (click or drag `.csv` file)
+- Client-side CSV parsing and email validation
+- Preview table showing first 10 rows with valid/invalid indicators
+- Summary of total valid/invalid before upload
+- Optional Batch ID text field
+- Progress bar during upload
+- Results: stat cards with expandable error/skip details
+
+### Tab 2: Manual Entry
+- Textarea for email addresses (one per line or comma-separated)
+- Converts to CSV format internally
+- Same progress and results display
+
+### Tab 3: Reports
+- **Refresh Reports**: Fetches all SharePoint items via Microsoft Graph
+- **Batch filter dropdown**: Populated from `SourceBatchId` values with per-batch counts
+- **Executive summary**: Total Users, MFA Active, Pending, Completion Rate %
+- **High reminder alerts**: Red warning for users with 2+ reminders
+- **Status breakdown**: Grid of status cards with counts and percentages
+- **Recent activity**: Last 7 days — invites sent, links clicked, added to group
+- **Users needing attention**: Follow-up required list
+- **Batch performance**: Per-batch completion rates
+- **Email report**: Compose and send executive summary email
+- **CSV export**: Download as `mfa-report-YYYY-MM-DD.csv` with proper escaping
+
+---
+
+## 6. Logic App Workflow
+
+### Scheduled Processing
+- Configurable recurrence (default: every 12 hours via `[LogicApp].RecurrenceHours`)
+- Processes all users where `InviteStatus` is `Pending`, `Sent`, or `Active`
+- For each user: look up in Entra ID, check MFA status, check group membership, update tracking fields
+
+### Retry Policies
+- **Exponential backoff** on all 16 API-connected actions
+- 3 retries, 10-second minimum interval, 1-hour maximum interval
+- Covers: SharePoint reads/writes, email sends, user lookups, group checks
+
+### Template Placeholder System
+- Logic App JSON (`invite-orchestrator-TEMPLATE.json`) uses 14 placeholders
+- All replaced from `mfa-config.ini` values at deployment
+- Re-applied when Logic App is redeployed via `Update-Deployment.ps1 -LogicApp`
+- Placeholders cover: recurrence, SharePoint URL/ListID, group ID, email addresses, branding
+
+---
+
+## 7. Application Insights
+
+### Telemetry
+- Full request and exception logging for all 4 Function App endpoints
+- Performance metrics and dependency tracking
+- Live Metrics Stream for real-time monitoring during rollouts
+- Automatic correlation of related operations
 
 ### Configuration
-Stored in `mfa-config.ini`:
-```ini
-[EmailReports]
-LogicAppName=logic-mfa-reports-123456
-Recipients=admin1@domain.com,admin2@domain.com
-Frequency=Day
-```
-
-**See [EMAIL-REPORTS-README.md](EMAIL-REPORTS-README.md) for complete documentation.**
+- Auto-provisioned by Script 04 (`04-Create-Azure-Resources.ps1`)
+- Instrumentation key and connection string stored in `mfa-config.ini`
+- Set as Function App environment variables
+- `host.json` controls: sampling rates (Request excluded), log levels, HTTP throttling (20 concurrent)
 
 ---
 
-## 🔄 User Journey
+## 8. Infrastructure as Code (Bicep)
 
-### 1. Administrator Uploads Users
-- Admin logs into Upload Portal
-- Uploads CSV with user list OR enters users manually
-- System validates and processes users
+### `infra/main.bicep`
+- Declarative definition of all Azure resources
+- Secure defaults: TLS 1.2, HTTPS-only, FTPS disabled
+- Resources: Storage Account, App Insights, App Service Plan (Consumption), Function App (with MI), O365 + SP API connections
+- Parameterised via `infra/main.parameters.json`
 
-### 2. Invitation Email Sent
-- Logic App sends personalized email to each user
-- Email contains enrollment instructions and unique link
-- SharePoint list updated with `InviteSentDate` and `InviteStatus=Sent`
-
-### 3. User Clicks Enrollment Link
-- User clicks link in email
-- Link points to Function App `enrol` endpoint
-- Function App processes the request
-
-### 4. Automatic Group Addition
-- Function App adds user to MFA security group
-- SharePoint list updated with:
-  - `ClickedLinkDate`: Timestamp of click
-  - `InGroup`: true
-  - `AddedToGroupDate`: Timestamp of addition
-  - `InviteStatus`: "AddedToGroup"
-
-### 5. Real-Time Tracking
-- Portal Reports tab shows live status
-- Admin sees user progress immediately
-- Dashboard updates automatically
-
-### 6. Automated Email Reports (NEW!)
-- Daily/weekly email sent to admins
-- Shows completion rates and status breakdown
-- Includes links to portal for detailed view
+### Outputs
+- Managed Identity principal ID, Function App hostname, App Insights keys, API connection IDs
 
 ---
 
-## 📊 Reporting & Monitoring
+## 9. SharePoint Tracking
 
-### Real-Time Dashboard (Upload Portal)
-- **Access**: Upload Portal > Reports tab
-- **Data Source**: SharePoint list via Microsoft Graph API
-- **Refresh**: Live on page load
-- **Metrics**:
-  - Total/Completed/Pending counts
-  - Completion percentage
-  - Status breakdown
-  - Recent activity (7 days)
-  - Users needing attention
-  - Batch performance
+### 24-Column Schema
+Comprehensive per-user tracking covering:
+- **Identity**: Title (UPN), ObjectId, DisplayName, Department, JobTitle, ManagerUPN, UserType
+- **Status**: InviteStatus (7 values), MFARegistrationState (3 values), InGroup (boolean)
+- **Dates**: InviteSentDate, ClickedLinkDate, AddedToGroupDate, MFARegistrationDate, LastChecked, LastReminderDate, EmailOpenedDate, EscalationDate
+- **Tracking**: TrackingToken (GUID, indexed), CorrelationId, ReminderCount, SourceBatchId
+- **Escalation**: EscalatedToManager (boolean), EscalationDate
+- **Notes**: Free-text notes column
 
-### Scheduled Email Reports (NEW!)
-- **Access**: Automated email delivery
-- **Frequency**: Daily or Weekly at 9 AM
-- **Recipients**: Configurable admin list
-- **Content**: Executive summary with completion metrics
-- **Links**: Direct to SharePoint and Upload Portal
-
-### Deployment Logs
-- **Location**: `logs\` folder
-- **Files**:
-  - `Part1-Setup_TIMESTAMP.log`
-  - `Part2-Deploy_TIMESTAMP.log`
-  - `DEPLOYMENT-COMPLETE-SUMMARY_TIMESTAMP.txt`
-  - `TECHNICAL-SUMMARY_TIMESTAMP.txt`
-  - `LogicApp-Deployed_TIMESTAMP.json`
-
-### Technical Documentation
-- **File**: `logs\TECHNICAL-SUMMARY_TIMESTAMP.txt`
-- **Generated**: Automatically after Part 2 deployment
-- **Contains**:
-  - All Resource IDs
-  - All Object IDs
-  - All URLs (direct portal links)
-  - Managed Identity IDs
-  - API Connection IDs
-  - Certificate thumbprints
-  - Troubleshooting commands
-  - Backup/DR instructions
+### Column Indexing
+Three columns are indexed for Graph API `$filter` performance:
+- `InviteStatus`
+- `MFARegistrationState`
+- `TrackingToken`
 
 ---
 
-## 🔐 Security & Permissions
+## 10. Update & Operations
 
-### Function App Managed Identity
-- **User.Read.All**: Read user information
-- **GroupMember.ReadWrite.All**: Add users to MFA group
-- **Sites.ReadWrite.All**: Update SharePoint list
+### Update-Deployment.ps1
+- 8 CLI switches: `-UpdateAll`, `-FunctionCode`, `-LogicApp`, `-Branding`, `-Permissions`, `-SharePointSchema`, `-BackfillTokens`, `-Upgrade`, `-QuickFix`
+- Interactive 7-option menu when run without switches
+- Each operation reads from `mfa-config.ini` for current configuration
 
-### Logic App Managed Identity (Invitations)
-- **Sites.Read.All**: Read SharePoint list for sending invitations
+### Operations Group
+- Mail-enabled security group for ops team
+- Automatically granted: mailbox FullAccess + SendAs, SharePoint site Members
+- Managed via Permissions sub-menu
 
-### Logic App Managed Identity (Reports) NEW!
-- **Sites.Read.All**: Read SharePoint list for generating reports
+### Self-Updating Scripts
+- `Setup.ps1` option [2]: Pull latest from GitHub, replace scripts, preserve config/certs/logs
+- Detects and migrates config from pre-v2 parent directories
 
-### Upload Portal (Delegated)
-- **User.Read**: Read user profile
-- **Sites.Read.All**: Read SharePoint list for Reports tab
-- **Admin Consent**: Automatically granted by Fix-Graph-Permissions.ps1
-
-### SharePoint Certificate Auth
-- Self-signed certificate for PnP PowerShell
-- Stored locally per configuration path
-- Used for list creation and configuration
+### Tracking Token Backfill
+- Generates `TrackingToken` GUIDs for users uploaded before v2
+- Run via `Update-Deployment.ps1 -BackfillTokens`
 
 ---
 
-## 🚀 Deployment Process
+## 11. Security Features
 
-### Prerequisites
-```powershell
-.\01-Install-Prerequisites.ps1
-```
-Installs: Azure CLI, Az PowerShell, PnP PowerShell, Microsoft.Graph modules
-
-### Part 1: M365 & SharePoint Setup
-```powershell
-.\Run-Part1-Setup-Enhanced.ps1
-```
-Runs:
-- `01-Setup-M365-Resources.ps1`: App registrations, security group
-- `02-Provision-SharePoint.ps1`: SharePoint list, certificate
-- `03-Create-Shared-Mailbox.ps1`: (Optional) Shared mailbox for emails
-
-### Part 2: Azure Deployment
-```powershell
-.\Run-Part2-Deploy-Enhanced.ps1
-```
-Runs:
-- `04-Create-Azure-Resources.ps1`: Resource group, Function App, Storage, Key Vault
-- `05-Configure-Function-App.ps1`: Deploy code, set environment variables
-- `06-Deploy-Logic-App.ps1`: Invitation workflow, API connections
-- `07-Deploy-Upload-Portal1.ps1`: Deploy portal, configure app registration
-- `08-Deploy-Email-Reports.ps1`: (Optional) Email reports setup
-- `Fix-Function-Auth.ps1`: Configure Easy Auth
-- `Fix-Graph-Permissions.ps1`: Grant API permissions + admin consent
-- `Check-LogicApp-Permissions.ps1`: Grant Logic App permissions
-
-### Post-Deployment
-1. Authorize API connections in Azure Portal
-2. Test upload portal
-3. Send test invitation
-4. Verify email report delivery (if enabled)
+- **Managed Identity**: No stored credentials for Function App operations
+- **Certificate auth**: PFX certificate for SharePoint App Registration
+- **Tracking tokens**: Random GUIDs prevent link guessing
+- **Anti-enumeration**: Resend endpoint returns identical response regardless of email existence
+- **Duplicate-click protection**: Prevents re-processing on repeated clicks
+- **HTTPS-only + TLS 1.2**: Enforced across all Azure resources
+- **FTPS disabled**: No FTP access to Function App
 
 ---
 
-## 🛠️ Configuration
+## 12. Deployment & Recovery
 
-### Central Configuration File: `mfa-config.ini`
-
-```ini
-[Tenant]
-TenantId=your-tenant-id
-TenantDomain=yourdomain.onmicrosoft.com
-
-[Azure]
-ResourceGroup=rg-mfa-onboarding
-Region=uksouth
-SubscriptionId=your-subscription-id
-StorageAccountName=stamfaupload123456
-FunctionAppName=func-mfa-enrol-123456
-KeyVaultName=kv-mfa-123456
-
-[Apps]
-FunctionAppClientId=app-guid
-UploadPortalClientId=app-guid
-
-[Security]
-MFAGroupId=group-guid
-MFAGroupName=SG-MFA-Enrolled
-
-[SharePoint]
-SiteUrl=https://yourtenant.sharepoint.com/sites/MFAOnboarding
-ListName=MFA Enrollment Tracking
-ListId=list-guid
-SiteName=MFAOnboarding
-
-[Email]
-FromAddress=mfa-invites@domain.com
-SharedMailboxAddress=mfa-invites@domain.com
-
-[Certificates]
-CertThumbprint=cert-thumbprint
-CertPath=.\cert-output\SharePointPnP.pfx
-
-[Logic]
-LogicAppName=logic-mfa-invite-123456
-
-[EmailReports]  # NEW!
-LogicAppName=logic-mfa-reports-123456
-Recipients=admin1@domain.com,admin2@domain.com
-Frequency=Day
-```
-
-**All scripts read from this file - no hardcoded values!**
-
----
-
-## 📖 Documentation Files
-
-| File | Purpose |
-|------|---------|
-| `WHATS-NEW.md` | Overview of all enhancements |
-| `ENHANCED-SCRIPTS-README.md` | Deployment scripts documentation |
-| `EMAIL-REPORTS-README.md` | Email reports feature guide |
-| `PORTAL-REPORTS-GUIDE.md` | Upload Portal Reports tab guide |
-| `FUNCTION-SHAREPOINT-INTEGRATION.md` | Function App SharePoint update guide |
-| `TECHNICAL-ARCHITECTURE.md` | System architecture and flow diagrams |
-
----
-
-## 🎯 Use Cases
-
-### Daily Operations
-1. **Morning Routine**: Admin checks email report for overnight progress
-2. **Upload New Batch**: Admin uploads CSV via portal
-3. **Monitor Progress**: Admin checks Reports tab for real-time status
-4. **Follow Up**: Admin sees "Users Needing Attention" list
-
-### Troubleshooting
-1. **User Not Receiving Email**: Check SharePoint list InviteStatus
-2. **User Clicked But Not in Group**: Check ClickedLinkDate vs AddedToGroupDate
-3. **Function App Error**: Check Function App logs in Azure Portal
-4. **Logic App Not Sending**: Check Logic App run history
-
-### Reporting to Management
-1. **Weekly Status**: Forward weekly email report
-2. **Detailed Analytics**: Share Upload Portal Reports tab screenshot
-3. **Completion Tracking**: Show trend over time from email reports
-4. **Batch Analysis**: Show batch performance from Reports tab
-
----
-
-## 🔄 Workflow Summary
-
-```
-┌─────────────────┐
-│ Admin Uploads   │
-│ Users (CSV)     │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Function App    │
-│ Validates &     │
-│ Processes Batch │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Logic App       │
-│ Sends Emails    │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ User Clicks     │
-│ Enrollment Link │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Function App    │
-│ Adds to Group   │
-│ Updates SharePt │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Real-Time       │
-│ Dashboard       │
-│ Shows Progress  │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Email Report    │
-│ (Daily/Weekly)  │
-│ Sent to Admins  │
-└─────────────────┘
-```
-
----
-
-## 💡 Best Practices
-
-### Before Deployment
-- ✅ Review `mfa-config.ini.template`
-- ✅ Prepare CSV with user list
-- ✅ Test in dev tenant first
-- ✅ Backup existing configurations
-
-### During Deployment
-- ✅ Run prerequisites first
-- ✅ Use enhanced deployment scripts
-- ✅ Save all generated logs
-- ✅ Review technical summary
-- ✅ Set up email reports
-
-### After Deployment
-- ✅ Test end-to-end flow with test user
-- ✅ Verify email report delivery
-- ✅ Check Upload Portal Reports tab
-- ✅ Authorize all API connections
-- ✅ Document tenant-specific details
-
-### Ongoing Operations
-- ✅ Monitor daily email reports
-- ✅ Check "Users Needing Attention" weekly
-- ✅ Follow up on pending users after 3 days
-- ✅ Archive completed batches monthly
-- ✅ Review batch performance for optimization
-
----
-
-## 🆘 Support & Troubleshooting
-
-### Common Issues
-
-**Email Reports Not Sending**
-- Solution: Authorize Office 365 connection in Azure Portal
-- Location: Resource Groups > Connections > office365-reports > Edit API connection
-
-**Reports Tab Shows No Data**
-- Solution: Verify Sites.Read.All permission granted
-- Run: `Fix-Graph-Permissions.ps1` to re-grant permissions
-
-**User Clicked Link But Not in Group**
-- Solution: Check Function App logs for errors
-- Verify: MFA_GROUP_ID environment variable is correct
-
-**Portal Not Loading**
-- Solution: Check storage account static website configuration
-- Verify: App registration redirect URIs match portal URL
-
-### Getting Help
-1. Check deployment logs in `logs\` folder
-2. Review Technical Summary for all IDs and URLs
-3. Check Function App logs in Azure Portal
-4. Check Logic App run history
-5. Verify Graph API permissions
-
----
-
-## 📞 Quick Reference
-
-### Key URLs (Replace with your values)
-- **Upload Portal**: `https://stamfauploadXXXXXX.z33.web.core.windows.net/upload-portal.html`
-- **SharePoint List**: `https://yourtenant.sharepoint.com/sites/MFAOnboarding/Lists/MFA Enrollment Tracking`
-- **Function App**: `https://func-mfa-enrol-XXXXXX.azurewebsites.net`
-- **Logic App (Invites)**: Azure Portal > Logic Apps > logic-mfa-invite-XXXXXX
-- **Logic App (Reports)**: Azure Portal > Logic Apps > logic-mfa-reports-XXXXXX
-
-### Key Scripts
-- Deploy All: `Run-Part2-Deploy-Enhanced.ps1`
-- Email Reports: `08-Deploy-Email-Reports.ps1`
-- Fix Permissions: `Fix-Graph-Permissions.ps1`
-- Technical Docs: `Create-TechnicalSummary.ps1`
-
----
-
-*Last Updated: December 2024*
-*MFA Onboarding System v2.0 - Complete Reporting Edition*
+- **8-step guided deployment** with automatic module installation and config collection
+- **Resume capability**: State saved after each step; resume from interruption point
+- **Idempotent scripts**: Safe to re-run without creating duplicates
+- **Deployment reports**: Automatic summary generation with testing instructions and resource URLs
+- **Technical summary**: All IDs, URLs, and troubleshooting commands captured

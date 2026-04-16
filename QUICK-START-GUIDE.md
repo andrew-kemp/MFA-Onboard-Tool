@@ -1,332 +1,156 @@
-# Quick Start Guide - MFA Onboarding with Email Reports
+# Quick Start Guide
 
-## 🚀 5-Minute Setup
-
-### Step 1: Prerequisites (One-Time)
-```powershell
-.\01-Install-Prerequisites.ps1
-```
-Installs required PowerShell modules and Azure CLI.
-
-### Step 2: Configure
-1. Copy `mfa-config.ini.template` to `mfa-config.ini`
-2. Fill in your tenant details
-
-### Step 3: Deploy M365 Resources
-```powershell
-.\Run-Part1-Setup-Enhanced.ps1
-```
-Creates app registrations, security group, SharePoint list.
-
-### Step 4: Deploy Azure Resources
-```powershell
-.\Run-Part2-Deploy-Enhanced.ps1
-```
-Creates Function App, Logic Apps, Storage, Upload Portal.
-
-**When prompted**: Choose "Y" to set up email reports!
-
-### Step 5: Authorize Connections
-1. Go to Azure Portal > Resource Groups > Your RG > Connections
-2. Authorize `office365` connection (for invitations)
-3. Authorize `office365-reports` connection (for email reports)
-
-### Step 6: Test
-1. Open Upload Portal URL (shown at end of deployment)
-2. Upload test CSV or enter user manually
-3. Check email report arrives at scheduled time
+Get up and running with the MFA Onboarding Tool in minutes.
 
 ---
 
-## 📧 Email Reports - Quick Reference
+## Prerequisites
 
-### What You Get
-- **Daily Reports**: Every day at 9:00 AM
-- **Weekly Reports**: Every Monday at 9:00 AM
-- **Content**: Total users, completed, pending, completion rate
-
-### How to Configure
-
-#### During Deployment
-When `Run-Part2-Deploy-Enhanced.ps1` asks about email reports:
-```
-Would you like to set up automated daily/weekly email reports? (Y/N)
-Choice: Y
-
-Enter email addresses to receive reports (comma-separated):
-Recipients: admin1@domain.com,admin2@domain.com
-
-Select report frequency:
-  1) Daily (9 AM)
-  2) Weekly (Monday 9 AM)  
-  3) Both Daily and Weekly
-Choice (1-3): 1
-```
-
-#### After Deployment
-Run standalone script:
-```powershell
-.\08-Deploy-Email-Reports.ps1
-```
-
-### Sample Email Report
-
-```
-┌────────────────────────────────────────┐
-│   📊 MFA Rollout Report                │
-│   Thursday, December 14, 2024          │
-└────────────────────────────────────────┘
-
-Executive Summary
-┌───────────────┬──────────────┐
-│ 250           │ 180          │
-│ Total Users   │ Completed    │
-├───────────────┼──────────────┤
-│ 70            │ 72%          │
-│ Pending       │ Completion   │
-└───────────────┴──────────────┘
-
-Quick Links
-• 📋 View SharePoint List
-• 📤 Upload Portal (with Reports Tab)
-
-💡 Visit the Reports tab in Upload Portal
-   for detailed user-level analytics.
-```
+| Requirement | Details |
+|-------------|---------|
+| **PowerShell 7+** | [Download PowerShell 7](https://learn.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows) |
+| **Azure CLI** | [Install Azure CLI](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli-windows) |
+| **Admin roles** | Global Admin (or Privileged Role Admin), SharePoint Admin, Exchange Admin, Azure Subscription Owner/Contributor |
+| **Licensing** | Microsoft 365 E3/E5 or Business Premium, Azure subscription |
 
 ---
 
-## 📊 Upload Portal Reports Tab
+## Option A: One-Line Bootstrap (Recommended)
 
-### What You See
-1. **Executive Summary**
-   - Total Users
-   - Completed (InGroup = true)
-   - Pending
-   - Completion Rate %
-
-2. **Status Breakdown**
-   - Sent: Invitations sent
-   - Clicked: Users clicked link
-   - AddedToGroup: Successfully added
-   - Pending: No action yet
-
-3. **Recent Activity** (Last 7 Days)
-   - Users who recently completed
-   - Timeline view
-
-4. **Users Needing Attention**
-   - Pending 3+ days
-   - Clicked but not in group
-
-5. **Batch Performance**
-   - Completion rate by batch ID
-   - Batch upload date
-
-### How to Access
-1. Open Upload Portal
-2. Click **Reports** tab
-3. Click **Load Reports**
-
----
-
-## 🎯 Complete Reporting Suite
-
-| Feature | Type | Frequency | Access |
-|---------|------|-----------|--------|
-| **Email Reports** | Automated | Daily/Weekly | Email inbox |
-| **Portal Dashboard** | Real-Time | On-demand | Upload Portal > Reports |
-| **SharePoint List** | Manual | Always | Direct link |
-| **Deployment Logs** | Static | After deploy | logs/ folder |
-| **Technical Summary** | Static | After deploy | logs/ folder |
-
----
-
-## 🔍 Monitoring Workflow
-
-### Daily
-1. **Check Email Report** (9 AM)
-   - See overnight progress
-   - Review completion rate
-   - Check total counts
-
-2. **Upload New Users** (As Needed)
-   - Via Upload Portal > CSV Upload
-   - Or Manual Entry tab
-
-3. **Monitor Real-Time** (Throughout Day)
-   - Upload Portal > Reports tab
-   - Check "Users Needing Attention"
-
-### Weekly
-1. **Review Weekly Email Report** (Monday 9 AM)
-   - Compare to previous week
-   - Identify trends
-   - Plan follow-ups
-
-2. **Follow Up on Pending Users**
-   - Check "Pending 3+ Days" list
-   - Send reminder emails
-   - Troubleshoot issues
-
-3. **Batch Performance Review**
-   - Check completion rates by batch
-   - Identify problematic batches
-   - Optimize future uploads
-
----
-
-## 🛠️ Troubleshooting
-
-### Email Reports Not Arriving
-**Problem**: No email received at scheduled time
-
-**Solution**:
-1. Check Logic App status:
-   ```
-   Azure Portal > Logic Apps > logic-mfa-reports-XXXXXX
-   Status: Should be "Enabled"
-   ```
-
-2. Check run history:
-   ```
-   Overview > Run History
-   Look for failed runs
-   ```
-
-3. Authorize Office 365 connection:
-   ```
-   Resource Groups > Your RG > Connections > office365-reports
-   Click "Edit API connection" > "Authorize" > Sign in > "Save"
-   ```
-
-### Reports Tab Shows No Data
-**Problem**: Portal Reports tab is empty
-
-**Solution**:
-1. Grant Sites.Read.All permission:
-   ```powershell
-   .\Fix-Graph-Permissions.ps1
-   ```
-
-2. Clear browser cache and reload portal
-
-3. Check SharePoint list has data:
-   - Open SharePoint list directly
-   - Verify users exist with data
-
-### Wrong Recipients for Email Reports
-**Problem**: Reports going to wrong people
-
-**Solution**:
-1. Edit `mfa-config.ini`:
-   ```ini
-   [EmailReports]
-   Recipients=newadmin1@domain.com,newadmin2@domain.com
-   ```
-
-2. Redeploy email reports:
-   ```powershell
-   .\08-Deploy-Email-Reports.ps1
-   ```
-
----
-
-## 📁 Key Files
-
-### Configuration
-- `mfa-config.ini` - All settings (edit this!)
-- `mfa-config.ini.template` - Template to copy
-
-### Deployment Scripts
-- `Run-Part1-Setup-Enhanced.ps1` - M365 setup
-- `Run-Part2-Deploy-Enhanced.ps1` - Azure deployment
-- `08-Deploy-Email-Reports.ps1` - Email reports (standalone)
-
-### Documentation
-- `COMPLETE-FEATURE-OVERVIEW.md` - Full feature list
-- `EMAIL-REPORTS-README.md` - Email reports guide
-- `WHATS-NEW.md` - Latest enhancements
-- `ENHANCED-SCRIPTS-README.md` - Deployment guide
-
-### Generated Logs (After Deployment)
-```
-logs/
-├── Part1-Setup_2024-12-14_093045.log
-├── Part2-Deploy_2024-12-14_095122.log
-├── DEPLOYMENT-COMPLETE-SUMMARY_2024-12-14_095122.txt
-├── TECHNICAL-SUMMARY_2024-12-14_095122.txt
-└── LogicApp-Deployed_2024-12-14_095122.json
-```
-
----
-
-## ⚡ Pro Tips
-
-### For Administrators
-- ✅ Set up **both** daily and weekly reports for comprehensive tracking
-- ✅ Check Portal Reports tab before big uploads to verify system health
-- ✅ Keep `TECHNICAL-SUMMARY` file handy for troubleshooting
-- ✅ Archive old deployment logs monthly
-
-### For Large Rollouts (1000+ Users)
-- ✅ Upload in batches of 100-200 users
-- ✅ Monitor batch performance via Reports tab
-- ✅ Space batches 1-2 hours apart
-- ✅ Check email reports daily during rollout
-
-### For Multi-Tenant Deployments
-- ✅ Use separate `mfa-config.ini` per tenant
-- ✅ Compare `TECHNICAL-SUMMARY` files across tenants
-- ✅ Deploy email reports to different recipient lists per tenant
-- ✅ Use consistent naming conventions
-
----
-
-## 📞 Quick Command Reference
+Open PowerShell 7 and run:
 
 ```powershell
-# Full deployment
-.\Run-Part2-Deploy-Enhanced.ps1
+irm https://raw.githubusercontent.com/andrew-kemp/MFA-Onboard-Tool/main/v2/Get-MFAOnboarder.ps1 -OutFile Get-MFAOnboarder.ps1; .\Get-MFAOnboarder.ps1
+```
 
-# Email reports only
-.\08-Deploy-Email-Reports.ps1
+This downloads the tool, asks for an install folder, and launches `Setup.ps1`.
 
-# Fix permissions (if reports not working)
-.\Fix-Graph-Permissions.ps1
+## Option B: Clone from GitHub
 
-# Generate technical summary anytime
-.\Create-TechnicalSummary.ps1
-
-# View logs
-Get-Content .\logs\Part2-Deploy_*.log -Tail 50
-
-# Check Logic App status
-az logic workflow show --name logic-mfa-reports-XXXXXX --resource-group rg-mfa-onboarding
+```powershell
+git clone https://github.com/andrew-kemp/MFA-Onboard-Tool.git
+cd MFA-Onboard-Tool/v2
+.\Setup.ps1
 ```
 
 ---
 
-## 🎓 Next Steps
+## First-Time Deployment
 
-1. ✅ Complete deployment (Parts 1 & 2)
-2. ✅ Set up email reports
-3. ✅ Test with sample users
-4. ✅ Review first email report
-5. ✅ Check Portal Reports tab
-6. ✅ Begin production rollout
-7. ✅ Monitor daily progress
-8. ✅ Review weekly trends
+When `Setup.ps1` detects a new install, select **[1] New deployment**. This runs 8 scripts in sequence:
+
+| Step | Script | What Happens |
+|------|--------|-------------|
+| 01 | Install Prerequisites | Installs PowerShell modules, connects to Azure/M365, collects configuration |
+| 02 | Provision SharePoint | Creates site, list (24 columns), app registration with certificate |
+| 03 | Create Shared Mailbox | Creates mailbox, grants delegate access |
+| 04 | Create Azure Resources | Resource Group, Storage, Function App, App Insights, Managed Identity |
+| 05 | Configure Function App | Deploys 4 function endpoints, sets environment variables |
+| 06 | Deploy Logic App | Creates workflow with email automation, reminders, escalation |
+| 07 | Deploy Upload Portal | Static website with CSV upload, manual entry, and reporting |
+| 08 | Deploy Email Reports | Scheduled email reporting Logic App |
+
+Each script reads from `mfa-config.ini` and prompts for any missing values. Post-deployment scripts automatically fix Graph API permissions and Logic App API connections.
+
+**Have these ready before starting:**
+- Your tenant domain (e.g., `contoso.onmicrosoft.com`)
+- Azure subscription ID
+- Desired names for: SharePoint site, shared mailbox, Function App, resource group
+- Company branding: logo URL, company name, support team name/email
 
 ---
 
-**Need Help?**
-- Check deployment logs in `logs/` folder
-- Review `TECHNICAL-SUMMARY` for all IDs
-- See `EMAIL-REPORTS-README.md` for troubleshooting
-- Check Logic App run history in Azure Portal
+## After Deployment
+
+### Test the Setup
+
+1. **Upload a test user:**
+   - Open the portal URL (shown after Script 07 completes)
+   - Log in with your admin account
+   - Go to the **CSV Upload** tab
+   - Upload the included `Test-Users.csv` or enter a test email in **Manual Entry**
+
+2. **Verify the Logic App:**
+   - Azure Portal → Logic App → Overview → **Run Trigger** → Recurrence
+   - Wait for the run to complete — check run history for success
+   - The test user should receive a branded invitation email
+
+3. **Click the enrolment link:**
+   - Click the "Set Up MFA Now" button in the email
+   - You should see a branded "MFA Enrolment Started" page
+   - Check the SharePoint list — `ClickedLinkDate` and `InGroup` should be updated
+
+4. **Check reports:**
+   - Go to the **Reports** tab in the upload portal
+   - Click **Refresh Reports**
+   - You should see the test user in the dashboard
+
+### Key URLs After Deployment
+
+All URLs are saved in `mfa-config.ini` and displayed after deployment:
+
+| Resource | Where to Find |
+|----------|--------------|
+| Upload Portal | Storage Account → Static website → Primary endpoint |
+| Function App | `https://<func-name>.azurewebsites.net` |
+| Logic App | Azure Portal → Logic App → Overview |
+| SharePoint List | `[SharePoint].SiteUrl` → Lists → MFA Onboarding |
 
 ---
 
-*MFA Onboarding System - Quick Start Guide*
-*With Automated Email Reports & Real-Time Dashboard*
+## Day-to-Day Operations
+
+### Uploading Users
+
+**CSV Upload** (bulk):
+1. Prepare a CSV with a column named `UPN`, `UserPrincipalName`, or `Email`
+2. Open the portal → CSV Upload tab → Drag/drop or browse for the file
+3. Review the preview, optionally enter a Batch ID
+4. Click Upload → Review results
+
+**Manual Entry** (individual):
+1. Open the portal → Manual Entry tab
+2. Enter email addresses (one per line or comma-separated)
+3. Click Submit
+
+### Monitoring Progress
+
+- **Portal Reports tab**: Real-time dashboards, batch filtering, CSV export
+- **Logic App run history**: Azure Portal → Logic App → Runs history
+- **Application Insights**: Full telemetry for function calls
+- **SharePoint list**: Direct view of all user statuses and dates
+
+### Updating the Tool
+
+```powershell
+.\Setup.ps1
+# Select [2] Pull latest scripts + update
+```
+
+Or for specific updates:
+```powershell
+.\Update-Deployment.ps1 -FunctionCode    # Redeploy functions only
+.\Update-Deployment.ps1 -LogicApp         # Redeploy Logic App only
+.\Update-Deployment.ps1 -Branding         # Change branding / email settings
+.\Update-Deployment.ps1 -SharePointSchema # Add any missing columns
+```
+
+---
+
+## Resuming a Failed Deployment
+
+If deployment is interrupted, just run `Setup.ps1` again and select **[5] Resume previous install**. It picks up from the last completed step.
+
+Or directly:
+```powershell
+.\Run-Complete-Deployment-Master.ps1 -Resume
+```
+
+---
+
+## Next Steps
+
+- [README.md](README.md) — Full documentation with architecture, configuration, and security details
+- [WHATS-NEW.md](WHATS-NEW.md) — Complete list of v2 features
+- [V2-ROADMAP.md](V2-ROADMAP.md) — Planned future features
+- [docs.andykemp.com](https://docs.andykemp.com) — Online documentation
