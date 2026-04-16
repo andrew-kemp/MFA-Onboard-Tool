@@ -192,6 +192,104 @@ try {
     Set-IniValue -Path $configFile -Section "Email" -Key "NoReplyMailbox" -Value $mailboxAddress
     Write-Host "✓ Configuration saved" -ForegroundColor Green
     
+    # ── Operations Group (Mail-Enabled Security Group) ────────────
+    Write-Host "`n========================================" -ForegroundColor Cyan
+    Write-Host "Operations Group (Mail-Enabled Security Group)" -ForegroundColor Cyan
+    Write-Host "========================================`n" -ForegroundColor Cyan
+    Write-Host "A mail-enabled security group can centralise access to the shared" -ForegroundColor Gray
+    Write-Host "mailbox and SharePoint site. Add/remove team members in one place." -ForegroundColor Gray
+    
+    $opsGroupName  = $config["OpsGroup"]["OpsGroupName"]
+    $opsGroupEmail = $config["OpsGroup"]["OpsGroupEmail"]
+    
+    if ([string]::IsNullOrWhiteSpace($opsGroupName)) {
+        $opsGroupName = Read-Host "`n  Ops group display name (e.g. MFA Operations Team, or Enter to skip)"
+    }
+    
+    if (-not [string]::IsNullOrWhiteSpace($opsGroupName)) {
+        if ([string]::IsNullOrWhiteSpace($opsGroupEmail)) {
+            $defaultAlias = ($opsGroupName -replace '[^a-zA-Z0-9-]', '-').ToLower()
+            $domain = ($mailboxAddress -split '@')[1]
+            $opsGroupEmail = Read-Host "  Ops group email [$defaultAlias@$domain]"
+            if ([string]::IsNullOrWhiteSpace($opsGroupEmail)) { $opsGroupEmail = "$defaultAlias@$domain" }
+        }
+        
+        Write-Host "`n  Creating mail-enabled security group..." -ForegroundColor Yellow
+        Write-Host "    Name:  $opsGroupName" -ForegroundColor Gray
+        Write-Host "    Email: $opsGroupEmail" -ForegroundColor Gray
+        
+        try {
+            Connect-ExchangeOnline -ShowBanner:$false
+            
+            # Check if group already exists
+            $existingGroup = Get-DistributionGroup -Identity $opsGroupEmail -ErrorAction SilentlyContinue
+            if ($existingGroup) {
+                Write-Host "  ✓ Group already exists" -ForegroundColor Green
+                $groupId = $existingGroup.ExternalDirectoryObjectId
+            } else {
+                $newGroup = New-DistributionGroup -Name $opsGroupName `
+                    -PrimarySmtpAddress $opsGroupEmail `
+                    -Type Security `
+                    -MemberDepartRestriction Closed `
+                    -MemberJoinRestriction Closed
+                Write-Host "  ✓ Mail-enabled security group created" -ForegroundColor Green
+                $groupId = $newGroup.ExternalDirectoryObjectId
+                
+                # Wait for provisioning
+                Start-Sleep -Seconds 10
+            }
+            
+            # Add initial member (delegate user)
+            if (-not [string]::IsNullOrWhiteSpace($delegateUser)) {
+                try {
+                    Add-DistributionGroupMember -Identity $opsGroupEmail -Member $delegateUser -ErrorAction Stop
+                    Write-Host "  ✓ Added $delegateUser to group" -ForegroundColor Green
+                } catch {
+                    if ($_.Exception.Message -match 'already a member') {
+                        Write-Host "  ✓ $delegateUser already a member" -ForegroundColor Green
+                    } else {
+                        Write-Warning "  Could not add member: $($_.Exception.Message)"
+                    }
+                }
+            }
+            
+            # Grant group access to shared mailbox
+            Write-Host "`n  Granting group access to shared mailbox..." -ForegroundColor Yellow
+            try {
+                Add-MailboxPermission -Identity $mailboxAddress -User $opsGroupEmail -AccessRights FullAccess -InheritanceType All -AutoMapping $false -ErrorAction Stop | Out-Null
+                Write-Host "  ✓ FullAccess granted to group" -ForegroundColor Green
+            } catch {
+                Write-Warning "  FullAccess: $($_.Exception.Message)"
+            }
+            try {
+                Add-RecipientPermission -Identity $mailboxAddress -Trustee $opsGroupEmail -AccessRights SendAs -Confirm:$false -ErrorAction Stop | Out-Null
+                Write-Host "  ✓ SendAs granted to group" -ForegroundColor Green
+            } catch {
+                Write-Warning "  SendAs: $($_.Exception.Message)"
+            }
+            
+            Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
+            
+            # Save to INI
+            Set-IniValue -Path $configFile -Section "OpsGroup" -Key "OpsGroupName" -Value $opsGroupName
+            Set-IniValue -Path $configFile -Section "OpsGroup" -Key "OpsGroupEmail" -Value $opsGroupEmail
+            if (-not [string]::IsNullOrWhiteSpace($groupId)) {
+                Set-IniValue -Path $configFile -Section "OpsGroup" -Key "OpsGroupId" -Value $groupId
+            }
+            
+            Write-Host "`n  ✓ Operations group configured" -ForegroundColor Green
+            Write-Host "    Members of $opsGroupEmail will have access to:" -ForegroundColor Gray
+            Write-Host "    - Shared mailbox ($mailboxAddress)" -ForegroundColor Gray
+            Write-Host "    - SharePoint site (configured in Step 02)" -ForegroundColor Gray
+        } catch {
+            Write-Warning "Failed to create ops group: $($_.Exception.Message)"
+            Write-Host "  You can create it later via Update-Deployment.ps1 -Permissions" -ForegroundColor Yellow
+            Disconnect-ExchangeOnline -Confirm:$false -ErrorAction SilentlyContinue
+        }
+    } else {
+        Write-Host "`n  Skipping operations group. You can create one later via Update-Deployment.ps1" -ForegroundColor Gray
+    }
+    
     Write-Host "`n✓ Step 03 completed successfully!" -ForegroundColor Green
     Write-Host "`nShared Mailbox Details:" -ForegroundColor Cyan
     Write-Host "  Email: $mailboxAddress" -ForegroundColor Gray

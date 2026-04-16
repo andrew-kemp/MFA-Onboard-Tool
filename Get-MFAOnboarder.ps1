@@ -46,14 +46,7 @@ Write-Host "Extracting files to $InstallPath..." -ForegroundColor Cyan
 Expand-Archive -Path $zipFile -DestinationPath $InstallPath -Force
 
 $repoFolder = Join-Path $InstallPath "MFA-Onboard-Tool-main"
-
-# Use v2 scripts if available, otherwise fall back to root
-$v2Folder = Join-Path $repoFolder "v2"
-if (Test-Path (Join-Path $v2Folder "Setup.ps1")) {
-    Set-Location $v2Folder
-} else {
-    Set-Location $repoFolder
-}
+Set-Location $repoFolder
 
 Write-Host "Starting setup..." -ForegroundColor Cyan
-./Setup.ps1 -SkipUpdate
+./Setup.ps1

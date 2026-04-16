@@ -184,6 +184,13 @@ try {
     
     Write-Host "`n✓ Logic App Managed Identity configured with all permissions" -ForegroundColor Green
     
+    # Verify and remediate permissions using Check-LogicApp-Permissions
+    Write-Host "`nVerifying Logic App permissions..." -ForegroundColor Yellow
+    $checkScript = Join-Path $PSScriptRoot "Check-LogicApp-Permissions.ps1"
+    if (Test-Path $checkScript) {
+        & $checkScript -AddPermissions
+    }
+    
     # Create API Connections
     Write-Host "`nCreating API Connections..." -ForegroundColor Yellow
     
@@ -357,6 +364,16 @@ try {
     
     $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_EMAIL", $noReplyMailbox)
     Write-Host "  ✓ Email From: $noReplyMailbox" -ForegroundColor Gray
+    
+    # Email subjects - use INI value or sensible defaults
+    $emailSubject = if ($config.ContainsKey("Email") -and $config["Email"].ContainsKey("EmailSubject") -and -not [string]::IsNullOrWhiteSpace($config["Email"]["EmailSubject"])) { $config["Email"]["EmailSubject"] } else { "Action Required: Set Up Multi-Factor Authentication (MFA)" }
+    $reminderSubject = if ($config.ContainsKey("Email") -and $config["Email"].ContainsKey("ReminderSubject") -and -not [string]::IsNullOrWhiteSpace($config["Email"]["ReminderSubject"])) { $config["Email"]["ReminderSubject"] } else { "Reminder #@{item()?['ReminderCount']}: MFA Setup Still Pending" }
+    
+    $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_REMINDER_SUBJECT", $reminderSubject)
+    Write-Host "  ✓ Reminder Subject: $reminderSubject" -ForegroundColor Gray
+    
+    $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_SUBJECT", $emailSubject)
+    Write-Host "  ✓ Email Subject: $emailSubject" -ForegroundColor Gray
     
     # Handle logo - if no URL provided, remove the entire logo section from emails
     if ([string]::IsNullOrWhiteSpace($logoUrl)) {

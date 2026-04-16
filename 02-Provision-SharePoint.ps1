@@ -379,6 +379,7 @@ try {
         Add-PnPField -List $listTitle -DisplayName "Reminder Count" -InternalName "ReminderCount" -Type Number
         Add-PnPField -List $listTitle -DisplayName "Last Reminder Date" -InternalName "LastReminderDate" -Type DateTime
         Add-PnPField -List $listTitle -DisplayName "Source Batch Id" -InternalName "SourceBatchId" -Type Text
+        Add-PnPField -List $listTitle -DisplayName "Tracking Token" -InternalName "TrackingToken" -Type Text
         Add-PnPField -List $listTitle -DisplayName "Correlation Id" -InternalName "CorrelationId" -Type Text
         Add-PnPField -List $listTitle -DisplayName "Notes" -InternalName "Notes" -Type Note
         
@@ -390,9 +391,10 @@ try {
         Add-PnPField -List $listTitle -DisplayName "Object Id" -InternalName "ObjectId" -Type Text
         Add-PnPField -List $listTitle -DisplayName "User Type" -InternalName "UserType" -Type Text
         
-        # Index the two state columns used by Logic Apps filters
+        # Index columns used by Logic App and Function App filters
         Set-PnPField -List $listTitle -Identity "InviteStatus" -Values @{ Indexed=$true }
         Set-PnPField -List $listTitle -Identity "MFARegistrationState" -Values @{ Indexed=$true }
+        Set-PnPField -List $listTitle -Identity "TrackingToken" -Values @{ Indexed=$true }
         
         Write-Host "✓ List created with all columns and indexes" -ForegroundColor Green
     }
@@ -422,6 +424,43 @@ try {
     } else {
         Write-Host "✓ Using security group: $groupName" -ForegroundColor Green
         Write-Host "  Object ID: $groupId" -ForegroundColor Gray
+    }
+    
+    # ── Add Operations Group as SharePoint Site Member ──────────
+    $opsGroupEmail = $config["OpsGroup"]["OpsGroupEmail"]
+    if (-not [string]::IsNullOrWhiteSpace($opsGroupEmail)) {
+        Write-Host "`n========================================" -ForegroundColor Cyan
+        Write-Host "Operations Group - SharePoint Access" -ForegroundColor Cyan
+        Write-Host "========================================`n" -ForegroundColor Cyan
+        Write-Host "Adding $opsGroupEmail as site member..." -ForegroundColor Yellow
+        
+        try {
+            # Connect to the site to manage permissions
+            try {
+                Connect-PnPOnline -Url $siteUrl -ClientId $clientId -Tenant $tenantId -CertificatePath $pfxPath -CertificatePassword $certPassword
+            } catch {
+                Connect-PnPOnline -Url $siteUrl -ClientId $clientId -Tenant $tenantId -Thumbprint $storeCert.Thumbprint
+            }
+            
+            # Get the Members group and add the ops group email
+            $membersGroup = Get-PnPGroup -AssociatedMemberGroup -ErrorAction SilentlyContinue
+            if ($membersGroup) {
+                Add-PnPGroupMember -Group $membersGroup -EmailAddress $opsGroupEmail -ErrorAction Stop
+                Write-Host "✓ $opsGroupEmail added to site Members group" -ForegroundColor Green
+            } else {
+                Write-Warning "Could not find Members group. Add the ops group manually in SharePoint site settings."
+            }
+            
+            Disconnect-PnPOnline -ErrorAction SilentlyContinue
+        } catch {
+            if ($_.Exception.Message -match 'already exists|is already a member') {
+                Write-Host "✓ $opsGroupEmail already a site member" -ForegroundColor Green
+            } else {
+                Write-Warning "Could not add ops group to SharePoint: $($_.Exception.Message)"
+                Write-Host "  You can add it later via Update-Deployment.ps1 -Permissions" -ForegroundColor Yellow
+            }
+            Disconnect-PnPOnline -ErrorAction SilentlyContinue
+        }
     }
     
     Write-Host "`n✓ Step 02 completed successfully!" -ForegroundColor Green
