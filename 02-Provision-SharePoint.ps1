@@ -391,6 +391,11 @@ try {
         Add-PnPField -List $listTitle -DisplayName "Object Id" -InternalName "ObjectId" -Type Text
         Add-PnPField -List $listTitle -DisplayName "User Type" -InternalName "UserType" -Type Text
         
+        # Tracking and escalation columns
+        Add-PnPField -List $listTitle -DisplayName "Email Opened Date" -InternalName "EmailOpenedDate" -Type DateTime
+        Add-PnPField -List $listTitle -DisplayName "Escalated To Manager" -InternalName "EscalatedToManager" -Type Boolean
+        Add-PnPField -List $listTitle -DisplayName "Escalation Date" -InternalName "EscalationDate" -Type DateTime
+        
         # Index columns used by Logic App and Function App filters
         Set-PnPField -List $listTitle -Identity "InviteStatus" -Values @{ Indexed=$true }
         Set-PnPField -List $listTitle -Identity "MFARegistrationState" -Values @{ Indexed=$true }

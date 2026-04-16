@@ -238,6 +238,31 @@ try {
         }
     }
     
+    # Create Application Insights
+    Write-Host "`nCreating Application Insights..." -ForegroundColor Yellow
+    $appInsightsName = $config["Azure"]["AppInsightsName"]
+    if ([string]::IsNullOrWhiteSpace($appInsightsName)) {
+        $appInsightsName = "appi-mfa-onboarding-$($storageName -replace 'stmfa','')"
+        Set-IniValue -Path $configFile -Section "Azure" -Key "AppInsightsName" -Value $appInsightsName
+    }
+    
+    $existingAI = az monitor app-insights component show --app $appInsightsName -g $rgName 2>$null | ConvertFrom-Json -ErrorAction SilentlyContinue
+    if ($null -eq $existingAI) {
+        Write-Host "  Creating Application Insights: $appInsightsName" -ForegroundColor Gray
+        $aiResult = az monitor app-insights component create --app $appInsightsName -g $rgName --location $region --kind web --application-type web 2>&1 | ConvertFrom-Json
+        $instrumentationKey = $aiResult.instrumentationKey
+        $connectionString = $aiResult.connectionString
+        Write-Host "✓ Application Insights created" -ForegroundColor Green
+    } else {
+        $instrumentationKey = $existingAI.instrumentationKey
+        $connectionString = $existingAI.connectionString
+        Write-Host "✓ Application Insights already exists" -ForegroundColor Green
+    }
+    
+    Set-IniValue -Path $configFile -Section "Azure" -Key "AppInsightsKey" -Value $instrumentationKey
+    Set-IniValue -Path $configFile -Section "Azure" -Key "AppInsightsConnectionString" -Value $connectionString
+    Write-Host "  Instrumentation Key: $instrumentationKey" -ForegroundColor Gray
+    
     # Enable Managed Identity
     Write-Host "`nEnabling Managed Identity..." -ForegroundColor Yellow
     $identity = Update-AzFunctionApp -ResourceGroupName $rgName -Name $functionAppName -IdentityType SystemAssigned -Force

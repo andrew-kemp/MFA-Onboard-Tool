@@ -470,6 +470,9 @@
                             <button type="button" class="btn" onclick="sendReportEmail()" style="display: inline-block; width: auto; padding: 12px 40px; background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);">
                                 📧 Email Report
                             </button>
+                            <button type="button" class="btn" onclick="exportToCSV()" style="display: inline-block; width: auto; padding: 12px 40px; background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);">
+                                📥 Export CSV
+                            </button>
                         </div>
                         
                         <div id="reportsLoading" class="loading" style="display: none;">
@@ -478,6 +481,13 @@
                         </div>
                         
                         <div id="reportsContent" style="display: none;">
+                            <!-- Batch Filter -->
+                            <div style="margin-bottom: 20px; padding: 15px; background: #f5f5f5; border-radius: 8px; display: flex; align-items: center; gap: 15px;">
+                                <label for="batchFilter" style="font-weight: 600; white-space: nowrap;">Filter by Batch:</label>
+                                <select id="batchFilter" onchange="applyBatchFilter()" style="flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px;">
+                                    <option value="">All Batches</option>
+                                </select>
+                            </div>
                             <!-- Executive Summary -->
                             <div style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 30px; border-radius: 12px; margin-bottom: 30px;">
                                 <h2 style="margin: 0 0 20px 0; color: white;">📊 MFA Rollout Dashboard</h2>
@@ -943,7 +953,7 @@
             
             try {
                 // Get access token with fallback to interactive
-                const accounts = myMSALObj.getAllAccounts();
+                const accounts = msalInstance.getAllAccounts();
                 if (accounts.length === 0) {
                     throw new Error('Please sign in first');
                 }
@@ -955,10 +965,10 @@
                 
                 let response;
                 try {
-                    response = await myMSALObj.acquireTokenSilent(tokenRequest);
+                    response = await msalInstance.acquireTokenSilent(tokenRequest);
                 } catch (silentError) {
                     console.log('Silent token acquisition failed for reports, requesting interactively...');
-                    response = await myMSALObj.acquireTokenPopup(tokenRequest);
+                    response = await msalInstance.acquireTokenPopup(tokenRequest);
                 }
                 const accessToken = response.accessToken;
                 
@@ -988,6 +998,20 @@
                 
                 const listData = await listResponse.json();
                 const items = listData.value.map(item => item.fields);
+                
+                // Store all items globally for filtering and export
+                window._allReportItems = items;
+                
+                // Populate batch filter dropdown
+                const batchIds = [...new Set(items.map(i => i.SourceBatchId || 'No Batch'))].sort();
+                const batchFilter = document.getElementById('batchFilter');
+                batchFilter.innerHTML = '<option value="">All Batches</option>';
+                batchIds.forEach(b => {
+                    const opt = document.createElement('option');
+                    opt.value = b;
+                    opt.textContent = b + ' (' + items.filter(i => (i.SourceBatchId || 'No Batch') === b).length + ' users)';
+                    batchFilter.appendChild(opt);
+                });
                 
                 // Generate reports
                 generateReports(items);
@@ -1158,6 +1182,48 @@
             }
             batchHTML += '</div>';
             document.getElementById('batchPerformance').innerHTML = batchHTML;
+        }
+        
+        // Apply batch filter to reports
+        function applyBatchFilter() {
+            const selectedBatch = document.getElementById('batchFilter').value;
+            const allItems = window._allReportItems || [];
+            const filtered = selectedBatch
+                ? allItems.filter(i => (i.SourceBatchId || 'No Batch') === selectedBatch)
+                : allItems;
+            generateReports(filtered);
+        }
+        
+        // Export current report data to CSV
+        function exportToCSV() {
+            const selectedBatch = document.getElementById('batchFilter').value;
+            const allItems = window._allReportItems || [];
+            if (allItems.length === 0) { alert('No data to export. Load reports first.'); return; }
+            const items = selectedBatch
+                ? allItems.filter(i => (i.SourceBatchId || 'No Batch') === selectedBatch)
+                : allItems;
+            
+            const columns = ['Title','DisplayName','Department','JobTitle','ManagerUPN','InviteStatus','MFARegistrationState','InGroup','InviteSentDate','ClickedLinkDate','AddedToGroupDate','MFARegistrationDate','ReminderCount','LastReminderDate','EmailOpenedDate','EscalatedToManager','EscalationDate','SourceBatchId','LastChecked'];
+            
+            const escapeCSV = (val) => {
+                if (val === null || val === undefined) return '';
+                const str = String(val);
+                return str.includes(',') || str.includes('"') || str.includes('\n') ? '"' + str.replace(/"/g, '""') + '"' : str;
+            };
+            
+            let csv = columns.join(',') + '\n';
+            items.forEach(item => {
+                csv += columns.map(col => escapeCSV(item[col])).join(',') + '\n';
+            });
+            
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            const datePart = new Date().toISOString().slice(0,10);
+            link.download = `mfa-report${selectedBatch ? '-' + selectedBatch : ''}-${datePart}.csv`;
+            link.click();
+            URL.revokeObjectURL(url);
         }
         
         // Send report email

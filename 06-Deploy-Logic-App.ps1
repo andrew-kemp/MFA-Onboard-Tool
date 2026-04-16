@@ -353,6 +353,14 @@ try {
     $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_FUNCTION_URL", $functionUrl)
     Write-Host "  ✓ Function URL: $functionUrl" -ForegroundColor Gray
     
+    $trackOpenUrl = "https://$functionAppName.azurewebsites.net/api/track-open"
+    $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_TRACK_OPEN_URL", $trackOpenUrl)
+    Write-Host "  ✓ Track Open URL: $trackOpenUrl" -ForegroundColor Gray
+    
+    $resendUrl = "https://$functionAppName.azurewebsites.net/api/resend"
+    $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_RESEND_URL", $resendUrl)
+    Write-Host "  ✓ Resend URL: $resendUrl" -ForegroundColor Gray
+    
     $logicAppJsonRaw = $logicAppJsonRaw.Replace("PLACEHOLDER_SHAREPOINT_SITE_URL", $siteUrl)
     Write-Host "  ✓ SharePoint URL: $siteUrl" -ForegroundColor Gray
     

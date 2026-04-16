@@ -150,6 +150,10 @@ try {
         Write-Host "  Note: Logic App trigger URL not set - will be configured after Logic App deployment" -ForegroundColor Gray
     }
     
+    # Get Application Insights connection string
+    $appInsightsConnStr = $config["Azure"]["AppInsightsConnectionString"]
+    $appInsightsKey = $config["Azure"]["AppInsightsKey"]
+    
     az functionapp config appsettings set `
         --resource-group $resourceGroup `
         --name $functionAppName `
@@ -159,6 +163,8 @@ try {
             "SHAREPOINT_SITE_NAME=$siteName" `
             "MFA_GROUP_ID=$mfaGroupId" `
             "LOGIC_APP_TRIGGER_URL=$logicAppTriggerUrl" `
+            "APPINSIGHTS_INSTRUMENTATIONKEY=$appInsightsKey" `
+            "APPLICATIONINSIGHTS_CONNECTION_STRING=$appInsightsConnStr" `
         2>&1 | Out-Null
     
     Write-Host "✓ Environment variables configured" -ForegroundColor Green

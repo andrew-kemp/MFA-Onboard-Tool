@@ -6,6 +6,17 @@
         "isEnabled": true,
         "excludedTypes": "Request"
       }
+    },
+    "logLevel": {
+      "Host.Results": "Information",
+      "Function": "Information",
+      "Host.Aggregator": "Trace"
+    }
+  },
+  "extensions": {
+    "http": {
+      "maxConcurrentRequests": 20,
+      "dynamicThrottlesEnabled": true
     }
   },
   "extensionBundle": {
