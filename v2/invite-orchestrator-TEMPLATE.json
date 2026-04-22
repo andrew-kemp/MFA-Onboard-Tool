@@ -14,6 +14,11 @@
                                                                           }
                                                        },
                                           "actions":  {
+                                                          "Compose_cutoff_time":  {
+                                                                                       "type":  "Compose",
+                                                                                       "inputs":  "@{formatDateTime(addHours(utcNow(), -24), 'yyyy-MM-ddTHH:mm:ssZ')}",
+                                                                                       "runAfter":  {}
+                                                                                   },
                                                           "Get_items":  {
                                                                             "type":  "ApiConnection",
                                                                             "runtimeConfiguration":  {
@@ -23,7 +28,10 @@
                                                                                                                                 "interval":  "PT10S",
                                                                                                                                 "maximumInterval":  "PT1H",
                                                                                                                                 "minimumInterval":  "PT10S"
-                                                                                                                            }
+                                                                                                                            },
+                                                                                                           "paginationPolicy":  {
+                                                                                                                                    "minimumItemCount":  100000
+                                                                                                                                }
                                                                                                        },
                                                                             "inputs":  {
                                                                                            "host":  {
@@ -34,16 +42,23 @@
                                                                                            "method":  "get",
                                                                                            "path":  "/datasets/@{encodeURIComponent(encodeURIComponent(\u0027PLACEHOLDER_SHAREPOINT_SITE_URL\u0027))}/tables/@{encodeURIComponent(encodeURIComponent(\u0027PLACEHOLDER_LIST_ID\u0027))}/items",
                                                                                            "queries":  {
-                                                                                                           "$filter":  "(InviteStatus eq \u0027Pending\u0027) or (InviteStatus eq \u0027Sent\u0027) or (InviteStatus eq \u0027Active\u0027)"
+                                                                                                           "$filter":  "@{concat('(InviteStatus eq ''Pending'') or (InviteStatus eq ''Sent'' and (LastChecked eq null or LastChecked le ''', outputs('Compose_cutoff_time'), '''))')}"
                                                                                                        }
                                                                                        },
                                                                             "runAfter":  {
-
+                                                                                             "Compose_cutoff_time":  [
+                                                                                                                         "Succeeded"
+                                                                                                                     ]
                                                                                          }
                                                                         },
                                                           "For_each_user":  {
                                                                                 "type":  "Foreach",
                                                                                 "foreach":  "@body(\u0027Get_items\u0027)?[\u0027value\u0027]",
+                                                                                "runtimeConfiguration":  {
+                                                                                                              "concurrency":  {
+                                                                                                                                  "repetitions":  5
+                                                                                                                              }
+                                                                                                          },
                                                                                 "actions":  {
                                                                                                 "Get_user":  {
                                                                                                                  "type":  "ApiConnection",

@@ -87,22 +87,25 @@ try {
     Connect-AzAccount -Identity -ErrorAction Stop
     $token = (Get-AzAccessToken -ResourceUrl "https://graph.microsoft.com").Token
     
-    # Get existing users from SharePoint using Graph API
+    # Get existing users from SharePoint using Graph API (paginated - handles >100 users)
     Write-Host "Checking for existing users..."
-    $listItemsUrl = "https://graph.microsoft.com/v1.0/sites/$spHostname`:/sites/$siteName`:/lists/$listId/items?`$expand=fields(`$select=Title,Id)"
-    $existingItemsResponse = Invoke-RestMethod -Uri $listItemsUrl -Headers @{
-        Authorization = "Bearer $token"
-        Accept = "application/json"
-    } -Method Get
-    
     $existingUpns = @{}
-    foreach ($item in $existingItemsResponse.value) {
-        if ($item.fields.Title) {
-            $existingUpns[$item.fields.Title.ToLower()] = $item.id
+    $nextPageUrl = "https://graph.microsoft.com/v1.0/sites/$spHostname`:/sites/$siteName`:/lists/$listId/items?`$expand=fields(`$select=Title,Id)&`$top=500"
+    $pageCount = 0
+    do {
+        $existingItemsResponse = Invoke-RestMethod -Uri $nextPageUrl -Headers @{
+            Authorization = "Bearer $token"
+            Accept = "application/json"
+        } -Method Get
+        $pageCount++
+        foreach ($item in $existingItemsResponse.value) {
+            if ($item.fields.Title) {
+                $existingUpns[$item.fields.Title.ToLower()] = $item.id
+            }
         }
-    }
-    
-    Write-Host "Found $($existingUpns.Count) existing users"
+        $nextPageUrl = $existingItemsResponse.'@odata.nextLink'
+    } while ($nextPageUrl)
+    Write-Host "Loaded $($existingUpns.Count) existing users across $pageCount page(s)"
     
     # Process users
     $results = @{
