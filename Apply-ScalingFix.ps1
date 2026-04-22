@@ -153,6 +153,28 @@ try {
     Write-Host "✓ Existing Logic App found`n" -ForegroundColor Green
 
     $logicAppJson = $logicAppJsonRaw | ConvertFrom-Json
+
+    # Fix: retryPolicy must be at action root level, not inside runtimeConfiguration.
+    # ARM API rejects "retryPolicy" as a member of FlowTemplateOperationRuntimeConfiguration.
+    function Move-RetryPolicyToActionLevel {
+        param($node)
+        if ($node -isnot [System.Management.Automation.PSCustomObject]) { return }
+        foreach ($prop in @($node.PSObject.Properties)) {
+            $child = $prop.Value
+            if ($child -isnot [System.Management.Automation.PSCustomObject]) { continue }
+            $rc = $child.runtimeConfiguration
+            if ($null -ne $rc -and $null -ne $rc.retryPolicy) {
+                $child | Add-Member -NotePropertyName 'retryPolicy' -NotePropertyValue $rc.retryPolicy -Force
+                $rc.PSObject.Properties.Remove('retryPolicy')
+                if (($rc.PSObject.Properties | Measure-Object).Count -eq 0) {
+                    $child.PSObject.Properties.Remove('runtimeConfiguration')
+                }
+            }
+            Move-RetryPolicyToActionLevel $child
+        }
+    }
+    Move-RetryPolicyToActionLevel $logicAppJson.properties.definition
+
     $armJson = @{
         location   = $region
         identity   = @{ type = "SystemAssigned" }
