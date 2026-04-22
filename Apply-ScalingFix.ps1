@@ -236,7 +236,28 @@ try {
 
     $functionCodePath = Join-Path $PSScriptRoot "function-code"
     if (-not (Test-Path $functionCodePath)) {
-        throw "function-code folder not found: $functionCodePath"
+        Write-Host "function-code folder not found locally — downloading from GitHub..." -ForegroundColor Yellow
+        $baseUrl = "https://raw.githubusercontent.com/andrew-kemp/MFA-Onboard-Tool/main/function-code"
+        $files = @(
+            "host.json",
+            "profile.ps1",
+            "requirements.psd1",
+            "enrol/run.ps1",
+            "enrol/function.json",
+            "resend/run.ps1",
+            "resend/function.json",
+            "track-open/run.ps1",
+            "track-open/function.json",
+            "upload-users/run.ps1",
+            "upload-users/function.json"
+        )
+        foreach ($file in $files) {
+            $dest = Join-Path $functionCodePath $file.Replace("/", "\")
+            $dir  = Split-Path $dest -Parent
+            if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+            Invoke-WebRequest -Uri "$baseUrl/$file" -OutFile $dest -UseBasicParsing
+        }
+        Write-Host "✓ Function code downloaded from GitHub`n" -ForegroundColor Green
     }
 
     # Package
