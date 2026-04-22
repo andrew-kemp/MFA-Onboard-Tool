@@ -180,6 +180,18 @@ try {
     }
     Remove-InvalidRetryPolicy $logicAppJson.properties.definition
 
+    # Fix: Check_Group_Membership returns HTTP 404 when user is NOT in the group.
+    # Logic Apps marks the Http action as Failed on 4xx, so Check_Group_Membership_Status
+    # (which reads the statusCode to decide the path) never runs for non-members.
+    # Fix: set its runAfter to ["Succeeded", "Failed"] so it always evaluates.
+    $foreach = $logicAppJson.properties.definition.actions.For_each_user
+    if ($null -ne $foreach) {
+        $statusCheck = $foreach.actions.Check_Group_Membership_Status
+        if ($null -ne $statusCheck -and $null -ne $statusCheck.runAfter) {
+            $statusCheck.runAfter.Check_Group_Membership = @("Succeeded", "Failed")
+        }
+    }
+
     $armJson = @{
         location   = $region
         identity   = @{ type = "SystemAssigned" }
