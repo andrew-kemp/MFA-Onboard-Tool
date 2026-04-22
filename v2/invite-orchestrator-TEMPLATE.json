@@ -108,8 +108,7 @@
                                                                                                                                                         "Title":  "@{item()?[\u0027Title\u0027]}",
                                                                                                                                                         "InviteStatus":  {
                                                                                                                                                                              "Value":  "Error"
-                                                                                                                                                                         },
-                                                                                                                                                        "Notes":  "User lookup failed: @{coalesce(actions(\u0027Get_user\u0027)?[\u0027error\u0027]?[\u0027message\u0027], \u0027Unknown error\u0027)}"
+                                                                                                                                                                         }
                                                                                                                                                     },
                                                                                                                                            "path":  "/datasets/@{encodeURIComponent(encodeURIComponent(\u0027PLACEHOLDER_SHAREPOINT_SITE_URL\u0027))}/tables/@{encodeURIComponent(encodeURIComponent(\u0027PLACEHOLDER_LIST_ID\u0027))}/items/@{encodeURIComponent(item()?[\u0027ID\u0027])}"
                                                                                                                                        },
