@@ -10,7 +10,12 @@
                                                                               "recurrence":  {
                                                                                                  "interval":  RECURRENCE_HOURS_PLACEHOLDER,
                                                                                                  "frequency":  "Hour"
-                                                                                             }
+                                                                                             },
+                                                                              "runtimeConfiguration":  {
+                                                                                                             "concurrency":  {
+                                                                                                                                 "runs":  1
+                                                                                                                             }
+                                                                                                         }
                                                                           }
                                                        },
                                           "actions":  {
