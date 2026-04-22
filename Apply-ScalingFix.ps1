@@ -174,7 +174,7 @@ try {
     $logicAppResourceId = "/subscriptions/$subscriptionId/resourceGroups/$resourceGroup/providers/Microsoft.Logic/workflows/$logicAppName"
     az rest --method PUT `
             --uri "https://management.azure.com$($logicAppResourceId)?api-version=2019-05-01" `
-            --headers "Content-Type=application/json" `
+            --headers "Content-Type=application/json" "If-Match=*" `
             --body "@$tempFile" | Out-Null
 
     Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
