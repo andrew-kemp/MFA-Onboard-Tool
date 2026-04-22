@@ -154,26 +154,31 @@ try {
 
     $logicAppJson = $logicAppJsonRaw | ConvertFrom-Json
 
-    # Fix: retryPolicy must be at action root level, not inside runtimeConfiguration.
-    # ARM API rejects "retryPolicy" as a member of FlowTemplateOperationRuntimeConfiguration.
-    function Move-RetryPolicyToActionLevel {
+    # Fix: retryPolicy is only valid on Http-type actions (inside inputs).
+    # ApiConnection actions (SharePoint, AzureAD, Office365) reject retryPolicy everywhere.
+    # Remove retryPolicy from runtimeConfiguration and from action root level on all actions.
+    function Remove-InvalidRetryPolicy {
         param($node)
         if ($node -isnot [System.Management.Automation.PSCustomObject]) { return }
         foreach ($prop in @($node.PSObject.Properties)) {
             $child = $prop.Value
             if ($child -isnot [System.Management.Automation.PSCustomObject]) { continue }
+            # Remove retryPolicy from action root level (invalid for ApiConnection actions)
+            if ($child.PSObject.Properties['retryPolicy'] -and $child.PSObject.Properties['type']) {
+                $child.PSObject.Properties.Remove('retryPolicy')
+            }
+            # Remove retryPolicy from inside runtimeConfiguration
             $rc = $child.runtimeConfiguration
-            if ($null -ne $rc -and $null -ne $rc.retryPolicy) {
-                $child | Add-Member -NotePropertyName 'retryPolicy' -NotePropertyValue $rc.retryPolicy -Force
+            if ($null -ne $rc -and $null -ne $rc.PSObject.Properties['retryPolicy']) {
                 $rc.PSObject.Properties.Remove('retryPolicy')
                 if (($rc.PSObject.Properties | Measure-Object).Count -eq 0) {
                     $child.PSObject.Properties.Remove('runtimeConfiguration')
                 }
             }
-            Move-RetryPolicyToActionLevel $child
+            Remove-InvalidRetryPolicy $child
         }
     }
-    Move-RetryPolicyToActionLevel $logicAppJson.properties.definition
+    Remove-InvalidRetryPolicy $logicAppJson.properties.definition
 
     $armJson = @{
         location   = $region
