@@ -59,6 +59,81 @@ $redirectScript
 "@
 }
 
+# ── Progress page — shows step-by-step status then redirects ──────
+function Get-ProgressHtml {
+    param(
+        [string]$Title = "Setting Up Your MFA",
+        [string]$Step1Label = "Adding you to the MFA group",
+        [string]$Step2Label = "Redirecting to Microsoft MFA setup",
+        [string]$RedirectUrl = "https://aka.ms/mfasetup",
+        [int]$RedirectSeconds = 6
+    )
+    return @"
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="refresh" content="$RedirectSeconds;url=$RedirectUrl">
+<title>$Title</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:linear-gradient(135deg,#1e3c72 0%,#2a5298 100%);min-height:100vh;display:flex;justify-content:center;align-items:center;padding:20px}
+.card{background:#fff;border-radius:12px;box-shadow:0 10px 40px rgba(0,0,0,.2);max-width:520px;width:100%;overflow:hidden}
+.card-header{background:#0078D4;padding:30px;color:#fff;text-align:center}
+.card-header .icon{font-size:48px;margin-bottom:10px}
+.card-header h1{font-size:22px;font-weight:600}
+.card-body{padding:30px}
+.steps{list-style:none;margin:0;padding:0}
+.step{display:flex;align-items:center;padding:14px 0;border-bottom:1px solid #eee;font-size:15px;color:#333;transition:opacity .3s}
+.step:last-child{border-bottom:none}
+.step .status{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;margin-right:14px;flex-shrink:0;font-weight:700;font-size:14px}
+.step.pending .status{background:#e0e0e0;color:#999}
+.step.pending{opacity:.5}
+.step.active .status{background:#0078D4;color:#fff;animation:pulse 1.2s infinite}
+.step.done .status{background:#4caf50;color:#fff}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,120,212,.5)}50%{box-shadow:0 0 0 8px rgba(0,120,212,0)}}
+.footer-note{margin-top:20px;text-align:center;color:#888;font-size:13px}
+.footer-note a{color:#0078D4;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="card">
+<div class="card-header"><div class="icon">&#128274;</div><h1>$Title</h1></div>
+<div class="card-body">
+<ul class="steps">
+<li id="step1" class="step active"><span class="status"><span class="spinner"></span></span><span>$Step1Label</span></li>
+<li id="step2" class="step pending"><span class="status">2</span><span>$Step2Label</span></li>
+</ul>
+<p class="footer-note">Not redirecting automatically? <a href="$RedirectUrl">Click here to continue</a></p>
+</div>
+</div>
+<script>
+(function(){
+  var step1 = document.getElementById('step1');
+  var step2 = document.getElementById('step2');
+  // After 1.8s, mark step1 as done and step2 as active
+  setTimeout(function(){
+    step1.classList.remove('active');
+    step1.classList.add('done');
+    step1.querySelector('.status').innerHTML = '&#10003;';
+    step2.classList.remove('pending');
+    step2.classList.add('active');
+    step2.querySelector('.status').innerHTML = '<span class="spinner"></span>';
+  }, 1800);
+  // After $RedirectSeconds seconds, redirect (backup to meta refresh)
+  setTimeout(function(){
+    window.location.href = '$RedirectUrl';
+  }, $RedirectSeconds * 1000);
+})();
+</script>
+</body>
+</html>
+"@
+}
+
 # Accept token parameter (preferred) or legacy user parameter
 $trackingToken = $Request.Query.token
 $userEmail = $Request.Query.user
@@ -295,22 +370,23 @@ try {
         return
     }
     
-    # For browser/email clicks: Branded confirmation page with auto-redirect to MFA setup
-    $successTitle = if ($alreadyInGroup) { "You're Already Set Up" } else { "MFA Enrolment Started" }
-    $successMessage = if ($alreadyInGroup) {
-        "Your account is already registered for MFA. You'll be redirected to the MFA setup page shortly where you can review your settings."
+    # For browser/email clicks: Branded progress page with auto-redirect to MFA setup
+    if ($alreadyInGroup) {
+        $progressTitle = "You're Already Set Up"
+        $step1 = "Verified you're already in the MFA group"
     } else {
-        "Your account has been enrolled for MFA. You'll be redirected to the MFA setup page shortly to complete your registration."
+        $progressTitle = "Setting Up Your MFA"
+        $step1 = "Added you to the MFA group"
     }
-    $successIcon = if ($alreadyInGroup) { "&#9989;" } else { "&#128274;" }
+    $step2 = "Redirecting to Microsoft MFA setup"
 
     Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
         StatusCode = [HttpStatusCode]::OK
         Headers = @{ "Content-Type" = "text/html; charset=utf-8" }
-        Body = (Get-BrandedHtml -Title $successTitle -Message $successMessage -Icon $successIcon -Color "#4caf50" -RedirectUrl "https://aka.ms/mfasetup")
+        Body = (Get-ProgressHtml -Title $progressTitle -Step1Label $step1 -Step2Label $step2 -RedirectUrl "https://aka.ms/mfasetup" -RedirectSeconds 6)
     })
-    
-    Write-Host "Successfully processed click tracking for $userEmail (branded landing page)"
+
+    Write-Host "Successfully processed click tracking for $userEmail (progress landing page)"
 }
 catch {
     $errorDetail = $_.Exception.Message
