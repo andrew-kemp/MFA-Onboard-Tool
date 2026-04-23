@@ -77,13 +77,31 @@ try {
     # ── Fetch all Sent users (paginated) ──────────────────────────────────────
     Write-Host "Querying SharePoint for users with InviteStatus = 'Sent'..." -ForegroundColor Yellow
     $sentItems = [System.Collections.Generic.List[object]]::new()
-    $nextUrl   = "https://graph.microsoft.com/v1.0/sites/$siteId/lists/$listId/items?`$expand=fields(`$select=id,Title,InviteStatus,InviteSentDate,ReminderCount)&`$filter=fields/InviteStatus eq 'Sent'&`$top=500"
 
+    # SharePoint list filters on non-indexed custom columns require this header
+    $filterHeaders = @{
+        Authorization    = "Bearer $accessToken"
+        "Content-Type"   = "application/json"
+        Prefer           = "HonorNonIndexedQueriesWarningMayFailRandomly"
+    }
+
+    # Fetch all items and filter client-side — works regardless of indexed columns
+    $nextUrl = "https://graph.microsoft.com/v1.0/sites/$siteId/lists/$listId/items?`$expand=fields(`$select=id,Title,InviteStatus,InviteSentDate,ReminderCount)&`$top=500"
+
+    Write-Host "  (fetching all list items and filtering client-side)" -ForegroundColor DarkGray
+    $totalFetched = 0
     do {
-        $resp    = Invoke-RestMethod -Uri $nextUrl -Headers $headers
-        foreach ($item in $resp.value) { $sentItems.Add($item) }
+        $resp    = Invoke-RestMethod -Uri $nextUrl -Headers $filterHeaders
+        foreach ($item in $resp.value) {
+            $totalFetched++
+            if ($item.fields.InviteStatus -eq 'Sent') {
+                $sentItems.Add($item)
+            }
+        }
         $nextUrl = $resp.'@odata.nextLink'
     } while ($nextUrl)
+
+    Write-Host "  Scanned $totalFetched total list items" -ForegroundColor DarkGray
 
     if ($sentItems.Count -eq 0) {
         Write-Host "`n✓ No users with InviteStatus='Sent' found. Nothing to do." -ForegroundColor Green
