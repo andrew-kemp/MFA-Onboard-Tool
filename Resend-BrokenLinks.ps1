@@ -120,6 +120,7 @@ try {
                 InviteSentDate  = $null
                 ReminderCount   = 0
                 LastReminderDate = $null
+                TrackingToken   = [guid]::NewGuid().ToString()
             }
         } | ConvertTo-Json -Depth 5
 

@@ -142,6 +142,7 @@ try {
                     InviteStatus = "Pending"
                     MFARegistrationState = "Unknown"
                     SourceBatchId = $batchId
+                    TrackingToken = [guid]::NewGuid().ToString()
                 } | ConvertTo-Json
                 
                 Invoke-RestMethod -Uri $updateUrl -Headers @{
@@ -155,6 +156,7 @@ try {
             else {
                 # Add new user using Graph API
                 $addUrl = "https://graph.microsoft.com/v1.0/sites/$spHostname`:/sites/$siteName`:/lists/$listId/items"
+                $trackingToken = [guid]::NewGuid().ToString()
                 $addBody = @{
                     fields = @{
                         Title = $upn
@@ -163,6 +165,7 @@ try {
                         InGroup = $false
                         ReminderCount = 0
                         SourceBatchId = $batchId
+                        TrackingToken = $trackingToken
                     }
                 } | ConvertTo-Json
                 
