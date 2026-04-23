@@ -141,9 +141,10 @@ $lookupByToken = $false
 
 if (-not $trackingToken -and -not $userEmail) {
     Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
-        StatusCode = [HttpStatusCode]::BadRequest
-        Headers = @{ "Content-Type" = "text/html; charset=utf-8" }
-        Body = (Get-BrandedHtml -Title "Invalid Link" -Message "This link is missing required information. Please use the link from your MFA setup email." -Icon "&#10060;" -Color "#d32f2f")
+        StatusCode  = [HttpStatusCode]::BadRequest
+        ContentType = "text/html; charset=utf-8"
+        Headers     = @{ "Content-Type" = "text/html; charset=utf-8" }
+        Body        = (Get-BrandedHtml -Title "Invalid Link" -Message "This link is missing required information. Please use the link from your MFA setup email." -Icon "&#10060;" -Color "#d32f2f")
     })
     return
 }
@@ -223,9 +224,10 @@ try {
         if ($listItems.value.Count -eq 0) {
             Write-Host "Warning: Token not found in SharePoint list"
             Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
-                StatusCode = [HttpStatusCode]::NotFound
-                Headers = @{ "Content-Type" = "text/html; charset=utf-8" }
-                Body = (Get-BrandedHtml -Title "Link Not Recognised" -Message "We couldn't find a matching record for this link. It may have expired or already been used. Please check your email for the most recent MFA setup invitation." -Icon "&#128269;" -Color "#f57c00")
+                StatusCode  = [HttpStatusCode]::NotFound
+                ContentType = "text/html; charset=utf-8"
+                Headers     = @{ "Content-Type" = "text/html; charset=utf-8" }
+                Body        = (Get-BrandedHtml -Title "Link Not Recognised" -Message "We couldn't find a matching record for this link. It may have expired or already been used. Please check your email for the most recent MFA setup invitation." -Icon "&#128269;" -Color "#f57c00")
             })
             return
         }
@@ -238,9 +240,10 @@ try {
         if ($spItem.fields.ClickedLinkDate) {
             Write-Host "User $userEmail already clicked on $($spItem.fields.ClickedLinkDate) - skipping"
             Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
-                StatusCode = [HttpStatusCode]::OK
-                Headers = @{ "Content-Type" = "text/html; charset=utf-8" }
-                Body = (Get-BrandedHtml -Title "Already Registered" -Message "You've already clicked this link and your MFA enrolment is in progress. You'll be redirected to the MFA setup page shortly." -Icon "&#9989;" -Color "#4caf50" -RedirectUrl "https://aka.ms/mfasetup")
+                StatusCode  = [HttpStatusCode]::OK
+                ContentType = "text/html; charset=utf-8"
+                Headers     = @{ "Content-Type" = "text/html; charset=utf-8" }
+                Body        = (Get-BrandedHtml -Title "Already Registered" -Message "You've already clicked this link and your MFA enrolment is in progress. You'll be redirected to the MFA setup page shortly." -Icon "&#9989;" -Color "#4caf50" -RedirectUrl "https://aka.ms/mfasetup")
             })
             return
         }
@@ -260,9 +263,10 @@ try {
             if ($spItem.fields.ClickedLinkDate) {
                 Write-Host "User $userEmail already clicked on $($spItem.fields.ClickedLinkDate) - skipping (legacy mode)"
                 Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
-                    StatusCode = [HttpStatusCode]::OK
-                    Headers = @{ "Content-Type" = "text/html; charset=utf-8" }
-                    Body = (Get-BrandedHtml -Title "Already Registered" -Message "You've already clicked this link and your MFA enrolment is in progress. You'll be redirected to the MFA setup page shortly." -Icon "&#9989;" -Color "#4caf50" -RedirectUrl "https://aka.ms/mfasetup")
+                    StatusCode  = [HttpStatusCode]::OK
+                    ContentType = "text/html; charset=utf-8"
+                    Headers     = @{ "Content-Type" = "text/html; charset=utf-8" }
+                    Body        = (Get-BrandedHtml -Title "Already Registered" -Message "You've already clicked this link and your MFA enrolment is in progress. You'll be redirected to the MFA setup page shortly." -Icon "&#9989;" -Color "#4caf50" -RedirectUrl "https://aka.ms/mfasetup")
                 })
                 return
             }
@@ -381,9 +385,10 @@ try {
     $step2 = "Redirecting to Microsoft MFA setup"
 
     Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
-        StatusCode = [HttpStatusCode]::OK
-        Headers = @{ "Content-Type" = "text/html; charset=utf-8" }
-        Body = (Get-ProgressHtml -Title $progressTitle -Step1Label $step1 -Step2Label $step2 -RedirectUrl "https://aka.ms/mfasetup" -RedirectSeconds 6)
+        StatusCode  = [HttpStatusCode]::OK
+        ContentType = "text/html; charset=utf-8"
+        Headers     = @{ "Content-Type" = "text/html; charset=utf-8" }
+        Body        = (Get-ProgressHtml -Title $progressTitle -Step1Label $step1 -Step2Label $step2 -RedirectUrl "https://aka.ms/mfasetup" -RedirectSeconds 6)
     })
 
     Write-Host "Successfully processed click tracking for $userEmail (progress landing page)"
@@ -400,9 +405,10 @@ catch {
     }
     Write-Host "ERROR: $errorDetail"
     Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
-        StatusCode = [HttpStatusCode]::InternalServerError
-        Headers = @{ "Content-Type" = "text/html; charset=utf-8" }
-        Body = (Get-BrandedHtml -Title "Something Went Wrong" -Message "We encountered an unexpected error while processing your request. Please try again in a few minutes, or contact your IT support team if the problem persists." -Icon "&#9888;" -Color "#d32f2f")
+        StatusCode  = [HttpStatusCode]::InternalServerError
+        ContentType = "text/html; charset=utf-8"
+        Headers     = @{ "Content-Type" = "text/html; charset=utf-8" }
+        Body        = (Get-BrandedHtml -Title "Something Went Wrong" -Message "We encountered an unexpected error while processing your request. Please try again in a few minutes, or contact your IT support team if the problem persists." -Icon "&#9888;" -Color "#d32f2f")
     })
 }
 
