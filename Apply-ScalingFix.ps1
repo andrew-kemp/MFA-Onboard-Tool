@@ -235,30 +235,36 @@ try {
     Write-Host "--------------------------------------------`n" -ForegroundColor Cyan
 
     $functionCodePath = Join-Path $PSScriptRoot "function-code"
-    if (-not (Test-Path $functionCodePath)) {
-        Write-Host "function-code folder not found locally — downloading from GitHub..." -ForegroundColor Yellow
-        $baseUrl = "https://raw.githubusercontent.com/andrew-kemp/MFA-Onboard-Tool/main/function-code"
-        $files = @(
-            "host.json",
-            "profile.ps1",
-            "requirements.psd1",
-            "enrol/run.ps1",
-            "enrol/function.json",
-            "resend/run.ps1",
-            "resend/function.json",
-            "track-open/run.ps1",
-            "track-open/function.json",
-            "upload-users/run.ps1",
-            "upload-users/function.json"
-        )
-        foreach ($file in $files) {
-            $dest = Join-Path $functionCodePath $file.Replace("/", "\")
-            $dir  = Split-Path $dest -Parent
-            if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-            Invoke-WebRequest -Uri "$baseUrl/$file" -OutFile $dest -UseBasicParsing
-        }
-        Write-Host "✓ Function code downloaded from GitHub`n" -ForegroundColor Green
+
+    # Always download the latest function code from GitHub (overwrites any stale
+    # local copy that might have shipped with an older install bundle).
+    Write-Host "Downloading latest function code from GitHub..." -ForegroundColor Yellow
+    $baseUrl = "https://raw.githubusercontent.com/andrew-kemp/MFA-Onboard-Tool/main/function-code"
+    $files = @(
+        "host.json",
+        "profile.ps1",
+        "requirements.psd1",
+        "enrol/run.ps1",
+        "enrol/function.json",
+        "resend/run.ps1",
+        "resend/function.json",
+        "track-open/run.ps1",
+        "track-open/function.json",
+        "upload-users/run.ps1",
+        "upload-users/function.json"
+    )
+    foreach ($file in $files) {
+        $dest = Join-Path $functionCodePath $file.Replace("/", "\")
+        $dir  = Split-Path $dest -Parent
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        Invoke-WebRequest -Uri "$baseUrl/$file" -OutFile $dest -UseBasicParsing
     }
+
+    # Remove any stale backup/test scripts that might be in the enrol folder from
+    # a previous install — these won't run, but we want a clean zip.
+    Get-ChildItem -Path $functionCodePath -Recurse -Include "run-backup.ps1","run-test.ps1" -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+    Write-Host "✓ Latest function code written to $functionCodePath`n" -ForegroundColor Green
 
     # Package
     Write-Host "Packaging function code..." -ForegroundColor Yellow
