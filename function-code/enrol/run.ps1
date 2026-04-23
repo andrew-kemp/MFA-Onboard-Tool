@@ -14,7 +14,9 @@ function Get-BrandedHtml {
 
     $redirectScript = ""
     $redirectHtml = ""
+    $metaRefresh = ""
     if ($RedirectUrl) {
+        $metaRefresh = "<meta http-equiv=`"refresh`" content=`"5;url=$RedirectUrl`">"
         $redirectHtml = @"
 <div class="countdown">Redirecting in <strong id="timer">5</strong> seconds...</div>
 <a href="$RedirectUrl" style="display:inline-block;background:linear-gradient(135deg,#1e3c72 0%,#2a5298 100%);color:#fff;text-decoration:none;padding:12px 30px;border-radius:25px;font-size:15px;font-weight:600;margin-bottom:15px">Continue Now</a>
@@ -30,6 +32,7 @@ function Get-BrandedHtml {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+$metaRefresh
 <title>$Title</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
