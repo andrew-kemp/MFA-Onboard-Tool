@@ -126,6 +126,22 @@ try {
             Authorization = "Bearer $token"
         } -Method Get
 
+        # Fallback: if the "token" is actually a UPN (happens when the user was
+        # imported before TrackingToken existed, so Logic App used Title as the
+        # fallback), try looking them up by Title instead.
+        if ($listItems.value.Count -eq 0 -and $trackingToken -match '@') {
+            Write-Host "Token not found as TrackingToken; it looks like a UPN — retrying lookup by Title"
+            $fallbackUrl = "https://graph.microsoft.com/v1.0/sites/$($siteDomain):$($sitePath):/lists/$listId/items?`$filter=fields/Title eq '$trackingToken'&`$expand=fields"
+            $listItems = Invoke-RestMethod -Uri $fallbackUrl -Headers @{
+                Authorization = "Bearer $token"
+            } -Method Get
+            if ($listItems.value.Count -gt 0) {
+                $lookupByToken = $false  # Treat as legacy UPN flow from here on
+                $userEmail = $trackingToken
+                Write-Host "Resolved UPN-as-token to user: $userEmail"
+            }
+        }
+
         if ($listItems.value.Count -eq 0) {
             Write-Host "Warning: Token not found in SharePoint list"
             Push-OutputBinding -Name Response -Value ([HttpResponseContext]@{
