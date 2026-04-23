@@ -2,7 +2,11 @@
 # Resets all SharePoint list users with InviteStatus='Sent' back to 'Pending'
 # so the Logic App re-sends them a fresh email with a working link.
 #
-# Uses PnP PowerShell (SharePoint site-owner auth) — no Graph consent required.
+# Uses the SharePoint REST API authenticated with an Azure CLI token for the
+# customer's own SharePoint tenant. Because this is SharePoint's own API,
+# authorization is controlled by SharePoint site permissions — if you're a
+# site owner, this works. No Graph consent required.
+#
 # Run from the deployment folder (same location as mfa-config.ini).
 
 $ErrorActionPreference = "Stop"
@@ -36,87 +40,113 @@ try {
     }
 
     $config    = Get-IniContent -Path $configFile
-    $siteUrl   = $config["SharePoint"]["SiteUrl"]
+    $siteUrl   = $config["SharePoint"]["SiteUrl"].TrimEnd('/')
     $listTitle = $config["SharePoint"]["ListTitle"]
-    $clientId  = $config["SharePoint"]["ClientId"]
 
     if ([string]::IsNullOrWhiteSpace($siteUrl))   { throw "SharePoint SiteUrl not set in mfa-config.ini" }
     if ([string]::IsNullOrWhiteSpace($listTitle)) { throw "SharePoint ListTitle not set in mfa-config.ini" }
 
-    Write-Host "SharePoint site : $siteUrl" -ForegroundColor Gray
-    Write-Host "List            : $listTitle`n" -ForegroundColor Gray
+    # Derive the SharePoint tenant root (https://<tenant>.sharepoint.com) for the token resource
+    $siteUri     = [System.Uri]$siteUrl
+    $spResource  = "https://$($siteUri.Host)"
 
-    # ── Ensure PnP module is available ────────────────────────────────────────
-    if (-not (Get-Module -ListAvailable -Name PnP.PowerShell)) {
-        Write-Host "PnP.PowerShell module not found — installing..." -ForegroundColor Yellow
-        Install-Module -Name PnP.PowerShell -Scope CurrentUser -Force -AllowClobber
-    }
-    Import-Module PnP.PowerShell -ErrorAction Stop
+    Write-Host "SharePoint site : $siteUrl"   -ForegroundColor Gray
+    Write-Host "List            : $listTitle" -ForegroundColor Gray
+    Write-Host "Resource        : $spResource`n" -ForegroundColor DarkGray
 
-    # ── Connect to SharePoint ─────────────────────────────────────────────────
-    Write-Host "Connecting to SharePoint (interactive login)..." -ForegroundColor Yellow
-    if (-not [string]::IsNullOrWhiteSpace($clientId)) {
-        Connect-PnPOnline -Url $siteUrl -Interactive -ClientId $clientId
-    } else {
-        Connect-PnPOnline -Url $siteUrl -Interactive
+    # ── Get SharePoint access token via Azure CLI ─────────────────────────────
+    Write-Host "Getting SharePoint access token (uses your Azure CLI login)..." -ForegroundColor Yellow
+    $tokenJson = az account get-access-token --resource $spResource 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host $tokenJson -ForegroundColor Red
+        throw "Failed to get SharePoint access token. Run 'az login' first."
     }
-    Write-Host "✓ Connected to SharePoint`n" -ForegroundColor Green
+    $token = ($tokenJson | ConvertFrom-Json).accessToken
+    Write-Host "✓ Token obtained`n" -ForegroundColor Green
+
+    $headers = @{
+        Authorization = "Bearer $token"
+        Accept        = "application/json;odata=nometadata"
+    }
+
+    # ── Encode the list title for URL ─────────────────────────────────────────
+    $encodedTitle = [System.Uri]::EscapeDataString($listTitle)
+    $listBase     = "$siteUrl/_api/web/lists/getbytitle('$encodedTitle')"
 
     # ── Fetch all Sent users ──────────────────────────────────────────────────
     Write-Host "Querying SharePoint for users with InviteStatus = 'Sent'..." -ForegroundColor Yellow
-    $allItems  = Get-PnPListItem -List $listTitle -PageSize 500 -Fields "Title","InviteStatus","InviteSentDate","ReminderCount"
-    $sentItems = @($allItems | Where-Object { $_["InviteStatus"] -eq "Sent" })
 
-    Write-Host "  Scanned $($allItems.Count) total list items" -ForegroundColor DarkGray
+    $selectFields = "Id,Title,InviteStatus,InviteSentDate,ReminderCount"
+    $filter       = "InviteStatus eq 'Sent'"
+    $queryUrl     = "$listBase/items?`$select=$selectFields&`$filter=$([System.Uri]::EscapeDataString($filter))&`$top=5000"
+
+    $sentItems = @()
+    $nextUrl   = $queryUrl
+    while ($nextUrl) {
+        $page = Invoke-RestMethod -Uri $nextUrl -Headers $headers -Method Get
+        if ($page.value) { $sentItems += $page.value }
+        $nextUrl = $page.'odata.nextLink'
+    }
 
     if ($sentItems.Count -eq 0) {
         Write-Host "`n✓ No users with InviteStatus='Sent' found. Nothing to do." -ForegroundColor Green
-        Disconnect-PnPOnline
         exit 0
     }
 
     Write-Host "`nFound $($sentItems.Count) user(s) with status 'Sent':" -ForegroundColor Yellow
     foreach ($item in $sentItems) {
-        $upn       = $item["Title"]
-        $sent      = $item["InviteSentDate"]
-        $reminders = $item["ReminderCount"]
-        Write-Host "  $upn  (sent: $sent, reminders: $reminders)" -ForegroundColor Gray
+        Write-Host "  $($item.Title)  (sent: $($item.InviteSentDate), reminders: $($item.ReminderCount))" -ForegroundColor Gray
     }
 
     Write-Host ""
     $confirm = Read-Host "Reset all $($sentItems.Count) user(s) to Pending? (y/n)"
     if ($confirm -notmatch '^y') {
         Write-Host "Aborted." -ForegroundColor Yellow
-        Disconnect-PnPOnline
         exit 0
     }
 
-    # ── Reset each user to Pending ────────────────────────────────────────────
+    # ── Reset each user to Pending via SharePoint MERGE ───────────────────────
     Write-Host "`nResetting users to Pending..." -ForegroundColor Yellow
     $success = 0
     $failed  = 0
 
+    $updateHeaders = @{
+        Authorization    = "Bearer $token"
+        Accept           = "application/json;odata=nometadata"
+        "Content-Type"   = "application/json;odata=nometadata"
+        "X-HTTP-Method"  = "MERGE"
+        "If-Match"       = "*"
+    }
+
     foreach ($item in $sentItems) {
+        $upn    = $item.Title
         $itemId = $item.Id
-        $upn    = $item["Title"]
+        $updateBody = @{
+            InviteStatus     = "Pending"
+            LastChecked      = $null
+            InviteSentDate   = $null
+            ReminderCount    = 0
+            LastReminderDate = $null
+            TrackingToken    = [guid]::NewGuid().ToString()
+        } | ConvertTo-Json -Compress
+
         try {
-            Set-PnPListItem -List $listTitle -Identity $itemId -Values @{
-                InviteStatus     = "Pending"
-                LastChecked      = $null
-                InviteSentDate   = $null
-                ReminderCount    = 0
-                LastReminderDate = $null
-                TrackingToken    = [guid]::NewGuid().ToString()
-            } | Out-Null
+            Invoke-RestMethod -Uri "$listBase/items($itemId)" -Headers $updateHeaders -Method Post -Body $updateBody | Out-Null
             Write-Host "  ✓ $upn" -ForegroundColor Green
             $success++
         } catch {
-            Write-Host "  ✗ $upn — $($_.Exception.Message)" -ForegroundColor Red
+            $errMsg = $_.Exception.Message
+            if ($_.Exception.Response) {
+                try {
+                    $stream = $_.Exception.Response.GetResponseStream()
+                    $reader = New-Object System.IO.StreamReader($stream)
+                    $errMsg = $reader.ReadToEnd()
+                } catch {}
+            }
+            Write-Host "  ✗ $upn — $errMsg" -ForegroundColor Red
             $failed++
         }
     }
-
-    Disconnect-PnPOnline
 
     $summaryColor = if ($failed -gt 0) { "Yellow" } else { "Green" }
     Write-Host "`n============================================" -ForegroundColor $summaryColor
@@ -138,6 +168,5 @@ try {
 
 } catch {
     Write-Host "`n✗ Error: $_" -ForegroundColor Red
-    try { Disconnect-PnPOnline -ErrorAction SilentlyContinue } catch {}
     exit 1
 }
