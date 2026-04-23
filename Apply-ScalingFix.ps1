@@ -251,7 +251,9 @@ try {
         "track-open/run.ps1",
         "track-open/function.json",
         "upload-users/run.ps1",
-        "upload-users/function.json"
+        "upload-users/function.json",
+        "reset-broken-links/run.ps1",
+        "reset-broken-links/function.json"
     )
     foreach ($file in $files) {
         $dest = Join-Path $functionCodePath $file.Replace("/", "\")
